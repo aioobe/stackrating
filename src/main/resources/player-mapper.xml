@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stackrating.db.PlayerMapper">
+
+    <resultMap id="player" type="com.stackrating.model.Player">
+        <constructor>
+            <idArg column="id" javaType="_int" />
+            <arg column="display_name" javaType="String" />
+            <arg column="rep" javaType="_int" />
+            <arg column="rating" javaType="_double" />
+            <arg column="rep_pos" javaType="_int" />
+            <arg column="rating_pos" javaType="_int" />
+        </constructor>
+    </resultMap>
+
+    <resultMap id="player_state" type="com.stackrating.storage.RatingUpdater$PlayerStateTracker$PlayerState">
+        <constructor>
+            <idArg column="player_id" javaType="_int" />
+            <arg column="num_games_played" javaType="_int" />
+            <arg column="current_rating" javaType="_double" />
+        </constructor>
+    </resultMap>
+    
+    <!-- This is used as a cache for showing pages of the players lists -->
+    <resultMap id="id_and_positions" type="com.stackrating.PlayerListCache$PlayerListEntry">
+        <constructor>
+            <idArg column="id" javaType="_int" />
+            <arg column="rep_pos" javaType="_int" />
+            <arg column="rating_pos" javaType="_int" />
+        </constructor>
+    </resultMap>
+    
+    <select id="getPlayer" resultMap="player">
+        SELECT
+            id,
+            TRIM(display_name) AS display_name,
+            rep,
+            rating,
+            rep_pos,
+            rating_pos
+        FROM players
+        WHERE id = #{id}
+    </select>
+
+    <select id="getAllPlayers" resultMap="player">
+        SELECT
+            id,
+            TRIM(display_name) AS display_name,
+            rep,
+            rating,
+            rep_pos,
+            rating_pos
+        FROM players
+    </select>
+
+    <select id="getNumPlayers" resultType="int">
+        SELECT COUNT(*)
+        FROM players
+    </select>
+
+    <!-- Using ROW_NUMBER instead of RANK to be able to look at {rep, rating}_pos to determine page -->
+    <!-- Since the introduction of PlayerListCache, this method is no longer used
+    <select id="getUsersPage" resultMap="player">
+        SELECT
+            id,
+            TRIM(display_name) AS display_name,
+            rep,
+            rating,
+            rep_pos,   (previously: ROW_NUMBER() OVER (ORDER BY rep DESC, id) AS rep_pos)
+            rating_pos (previously: ROW_NUMBER() OVER (ORDER BY rating DESC, id) AS rating_pos)
+        FROM players
+        ORDER BY ${orderBy} DESC, id
+        OFFSET #{pageSize} * (#{page} - 1)
+        LIMIT #{pageSize}
+    </select> -->
+    
+    <insert id="insertPlayer">
+        INSERT INTO players(id, display_name, rep, rating, rep_pos, rating_pos)
+        VALUES (#{id}, #{displayName}, #{rep}, 1500, -1, -1)
+    </insert>
+
+    <update id="updatePlayer">
+        UPDATE players
+        SET rating = #{rating}, display_name = #{displayName}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateRating">
+        UPDATE players
+        SET rating = #{rating}
+        WHERE id = #{playerId}
+    </update>
+
+    <select id="getPlayerStates" resultMap="player_state">
+        SELECT
+            player_id,
+            1500 + SUM(rating_delta) AS current_rating,
+            COUNT(*) AS num_games_played
+        FROM
+            entries
+        WHERE
+            game_id &lt; #{fromGameId}
+            AND player_id IN
+                <foreach item="id" collection="playerIds" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+        GROUP BY player_id;
+    </select>
+
+    <update id="updateRatingPositions">
+        UPDATE players
+        SET rating_pos = players_with_actual_rating_pos.actual_rating_pos
+        FROM players_with_actual_rating_pos
+        WHERE players.id = players_with_actual_rating_pos.id
+        AND players.id BETWEEN #{fromId} AND #{toId} - 1;    <!-- -1 since we want to be exclusive in the end -->
+    </update>
+
+    <update id="updateRepPositions">
+        UPDATE players
+        SET rep_pos = players_with_actual_rep_pos.actual_rep_pos
+        FROM players_with_actual_rep_pos
+        WHERE players.id = players_with_actual_rep_pos.id
+        AND players.id BETWEEN #{fromId} AND #{toId} - 1;    <!-- -1 since we want to be exclusive in the end -->
+    </update>
+
+    <select id="getMaxPlayerId" resultType="_int">
+        SELECT MAX(id)
+        FROM players
+    </select>
+
+    <select id="getPlayerListIds" resultMap="id_and_positions">
+        SELECT id, rep_pos, rating_pos
+        FROM players
+    </select>
+
+    <select id="getPlayers" resultMap="player">
+        SELECT
+            id,
+            TRIM(display_name) AS display_name,
+            rep,
+            rating,
+            rep_pos,
+            rating_pos
+        FROM
+            players
+        WHERE
+            id IN
+                <foreach item="id" collection="ids" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+    </select>
+    
+    
+</mapper>

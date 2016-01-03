@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stackrating.db.GameMapper">
+
+    <resultMap id="game" type="com.stackrating.model.Game">
+          <constructor>
+              <idArg column="id" javaType="_int" />
+              <arg column="title" javaType="String" />
+              <arg column="post_time" javaType="java.sql.Timestamp" />
+              <arg column="last_visit" javaType="java.sql.Timestamp" />
+          </constructor>
+    </resultMap>
+
+    <select id="getGame" resultMap="game">
+        SELECT *
+        FROM games
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insertGame">
+        INSERT INTO games(id, title, post_time, last_visit)
+        VALUES (#{id}, #{title}, #{postTime}, #{lastVisit})
+    </insert>
+
+    <update id="updateGame">
+        UPDATE
+            games
+        SET
+            title = #{title},
+            last_visit = #{lastVisit}
+        WHERE
+            id = #{id}
+    </update>
+
+    <select id="getMaxGameId" resultType="int">
+        SELECT MAX(id)
+        FROM games
+    </select>
+
+    <select id="getCycleStartGameId" resultType="int">
+        SELECT MIN(id)
+        FROM games
+        WHERE last_visit &lt; post_time + interval '90 days';
+    </select>
+
+    <update id="batchUpdateLastVisit">
+        UPDATE games
+        SET last_visit = #{lastVisit}
+        WHERE post_time BETWEEN #{from} AND #{to}
+    </update>
+    
+</mapper>

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.stackrating.db.EntryMapper">
+
+    <resultMap id="entry" type="com.stackrating.model.Entry">
+          <constructor>
+              <idArg column="id" javaType="_int" />
+              <arg column="player_id" javaType="_int" />
+              <arg column="game_id" javaType="_int" />
+              <arg column="votes" javaType="_int" />
+              <arg column="post_time" javaType="java.sql.Timestamp" />
+              <arg column="rating_delta" javaType="_double" />
+              <arg column="game_title" javaType="String" />
+              <arg column="user_display_name" javaType="String" />
+              <arg column="game_post_time" javaType="java.sql.Timestamp" />
+          </constructor>
+    </resultMap>
+
+    <resultMap id="rating-delta" type="com.stackrating.model.TimeDataPoint">
+        <constructor>
+            <arg column="timestamp" javaType="_long" typeHandler="com.stackrating.db.LongTimestampTypeHandler" />
+            <arg column="rating_delta" javaType="_double" />
+        </constructor>
+    </resultMap>
+
+    <select id="getEntryCountForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM entries
+        WHERE player_id = ${userId}
+    </select>
+
+    <select id="getEntriesForGame" resultMap="entry">
+        SELECT
+            entries.*,
+            players.display_name AS user_display_name,
+            NULL AS game_title,
+            NULL AS game_post_time
+        FROM
+            entries,
+            players
+        WHERE
+            entries.game_id = ${gameId}
+            AND entries.player_id = players.id
+    </select>
+
+    <select id="getEntry" resultMap="entry">
+        SELECT
+            entries.*,
+            NULL AS user_display_name,
+            NULL AS game_title,
+            NULL AS game_post_time
+        FROM
+            entries
+        WHERE
+            id = #{id} AND game_id = #{gameId}
+    </select>
+
+    <select id="getEntriesPage" resultMap="entry">
+        SELECT
+            entries.*,
+            TRIM(games.title) AS game_title,
+            NULL AS user_display_name,
+            NULL AS game_post_time
+        FROM
+            entries,
+            games
+        WHERE
+            entries.game_id = games.id
+            AND player_id = ${userId}
+        ORDER BY
+            game_id DESC
+        OFFSET
+            #{pageSize} * (#{page} - 1)
+        LIMIT
+            #{pageSize}
+    </select>
+
+    <select id="getRatingDeltas" resultMap="rating-delta">
+        SELECT
+            games.post_time AS timestamp,
+            entries.rating_delta AS rating_delta
+        FROM
+            entries,
+            games
+        WHERE
+            entries.game_id = games.id
+            AND player_id = ${userId}
+        ORDER BY
+            games.post_time
+    </select>
+
+    <select id="getEntriesForGames" resultMap="entry">
+        SELECT
+            entries.*,
+            TRIM(games.title) AS game_title,
+            NULL AS user_display_name,
+            games.post_time AS game_post_time
+        FROM
+            entries,
+            games
+        WHERE
+            games.id BETWEEN #{fromGameId} AND #{toGameId}
+            AND games.id = entries.game_id
+    </select>
+
+    <insert id="insertEntry">
+        INSERT INTO entries(id, player_id, game_id, votes, post_time, rating_delta)
+        VALUES (#{id}, #{playerId}, #{gameId}, #{votes}, #{postTime}, #{ratingDelta})
+    </insert>
+
+    <update id="updateEntry">
+        UPDATE entries
+        SET votes = #{votes}, rating_delta = #{ratingDelta}
+        WHERE id = #{id} AND game_id = #{gameId}
+    </update>
+
+</mapper>

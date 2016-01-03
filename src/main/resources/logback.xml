@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+ 
+    <turboFilter class="com.stackrating.log.ThrottlingFilter">
+        <IdlePeriod>5000</IdlePeriod>
+    </turboFilter>
+
+    
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>%date{yyyy-MM-dd HH:mm:ss} %-5level: %msg%n</Pattern>
+        </layout>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>stackrating-debug.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>%date{yyyy-MM-dd HH:mm:ss} %-5level: %msg%n</Pattern>
+        </layout>
+    </appender>
+
+    <!-- Use debug level to see progress printouts in FILE appender. -->
+    <!-- Note that Mapper classes are excluded so we don't get all the SQL too. -->
+    <logger name="com.stackrating.storage" level="debug"/>
+    <logger name="com.stackrating.Main" level="debug"/>
+    <logger name="com.stackrating.ContentUpdater" level="debug"/>
+    <logger name="com.stackrating.monitor" level="debug"/>
+ 
+    <root level="info">
+        <appender-ref ref="STDOUT" />
+        <appender-ref ref="FILE" />
+    </root>
+</configuration>

@@ -1,0 +1,16 @@
+# Maven
+target/
+dependency-reduced-pom.xml
+
+# IntelliJ
+*.iml
+.idea/
+
+# Configuration
+src/main/resources/*.properties
+
+# Runtime
+stackrating-debug.log
+
+# Scratch package
+src/main/java/scratch
