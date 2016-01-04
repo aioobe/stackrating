@@ -16,12 +16,14 @@ import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Properties;
 
 import static com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory.newInstance;
 import static com.google.code.stackexchange.schema.StackExchangeSite.STACK_OVERFLOW;
 import static com.stackrating.Main.formatInstant;
+import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.time.temporal.ChronoUnit.SECONDS;
 
 public class SOContentDownloader {
@@ -54,6 +56,7 @@ public class SOContentDownloader {
                                          "Refreshing/downloading questions...",
                                          Duration.between(from, visitTime).toHours());
         int questionsDownloadedSoFar = 0;
+        Game lastProcessed = null;
         while (true) {
             apiLock.acquire();
             PagedList<Question> questions = queryFactory.newQuestionApiQuery()
@@ -64,17 +67,18 @@ public class SOContentDownloader {
                                                         .list();
             lastSeenQuota = questions.getQuotaRemaining();
             apiLock.release(questions.getBackoff(), SECONDS);
+
+            // Are we done?
             if (questions.isEmpty()) {
                 logger.info("All questions in cycle period (" + formatInstant(from) + " - " + formatInstant(visitTime) + ") downloaded.");
                 break;
             }
 
-            Game lastProcessed = null;
             for (Question q : questions) {
                 lastProcessed = processQuestion(q, visitTime);
                 questionsDownloadedSoFar++;
             }
-            
+
             // Some games may have been deleted. These games will not be returned in this query,
             // which means their lastVisit will be unchanged. This causes the cycle to reset to
             // this game over and over again. We could either use a different query for existing
@@ -84,9 +88,10 @@ public class SOContentDownloader {
             // time range instead.
             Instant nextT = lastProcessed.getPostTime().toInstant();
             storage.batchUpdateLastVisit(t, nextT, visitTime);
-            
-            // Advance current point in time
-            t = nextT;
+
+            // Advance current point in time (+ 1ms to avoid getting the last processed game in the
+            // next query too)
+            t = nextT.plus(1, MILLIS);
             progress.setProgress(Duration.between(from, t).toHours(),
                                  "quota: " + questions.getQuotaRemaining(),
                                  "time: " + formatInstant(t));
