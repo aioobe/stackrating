@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -51,11 +52,6 @@ public class ContentUpdater {
         setCycleStartTime();
         logger.info("Refreshing/downloading new questions...");
 
-        if (contentDownloader.getLastSeenQuota() <= 24) {
-            logger.info("Low on quota (" + contentDownloader.getLastSeenQuota() + "). Sleeping for 1h");
-            Thread.sleep(HOURS.getDuration().toMillis());
-        }
-
         contentDownloader.refreshContent(cycleStartGame.getPostTime().toInstant());  // .minus(10, MINUTES); // Step back a little bit to make sure we visit the question at the 'from' timestamp.
 
         doDatabaseFixup(cycleStartGame.getId());
@@ -87,6 +83,17 @@ public class ContentUpdater {
 
             // Used to for instance reload caches.
             endOfCycleCallback.run();
+
+            // Currently, we have a daily quota on 10000, and one cycle consumes ~6000. 1 cycle a
+            // day is acceptable right now, so we're fine. The code below avoids an endless CPU and
+            // disk hogging cycle where we download just a few questions and then refresh the entire
+            // database over and over again.
+            if (contentDownloader.getLastSeenQuota() < 1000) {
+                // Sleep for 24 hours.
+                for (long i = 0; i < Duration.of(24, HOURS).toMillis() && keepRunning; i += 1000) {
+                    Thread.sleep(1000);
+                }
+            }
         }
         control.release();
     }
