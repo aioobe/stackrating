@@ -87,7 +87,7 @@
 
     <h2 style="text-align: left">Live Monitoring</h2>
     <p>
-        The Stack Overflow site is monitored continuously through the StackExchange API (thanks <a href="http://stackapps.com/users/22733/sanjiv">Sanjiv</a> for the Java API!). New questions are currently scanned every second minute. As the question gets older the scan frequency drops. After 3 months the question is no longer scanned.
+        The Stack Overflow site is monitored continuously through the StackExchange API (thanks <a href="http://stackapps.com/users/22733/sanjiv">Sanjiv</a> for the Java API!). Currently it scans all questions from the past 90 days at least once every 24 hours.
     </p>
 
     <h2 style="text-align: left">Links to relevant StackExchange posts</h2>
@@ -101,10 +101,10 @@
         Original idea and code by me, <a href="http://stackoverflow.com/users/276052/aioobe">aioobe</a>. Lots of valuable feedback from <a href="http://stackoverflow.com/users/271357/dacwe">dacwe</a>.
     </p>
     <p>
-        I did this as a &ldquo;weekend project&rdquo; and it&rsquo;s a bit of a one-off hack. I don&rsquo;t have any plans to continue the development. (I simply don&rsquo;t have time.) Please drop me an email if you&rsquo;re interested in taking this further.
+        If you want to do a Greasemonkey script that embeds rating on Stack Overflow, or if you want to create a badge or something, you can use <code>stackrating.com/rating/&lt;userid&gt;</code>.
     </p>
     <p>
-        Finally, if you want to do a Greasemonkey script that embeds rating on Stack Overflow, or if you want to create a badge or something, you can use <code>stackrating.com/rating/&lt;userid&gt;</code>.
+        Source code available on GitHub: <a href="https://github.com/aioobe/stackrating">https://github.com/aioobe/stackrating</a>.
     </p>
 </#macro>
 
