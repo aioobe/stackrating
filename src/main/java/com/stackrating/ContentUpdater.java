@@ -89,6 +89,7 @@ public class ContentUpdater {
             // disk hogging cycle where we download just a few questions and then refresh the entire
             // database over and over again.
             if (contentDownloader.getLastSeenQuota() < 1000) {
+                logger.info("Low on quota. Sleeping for 24 hours.");
                 // Sleep for 24 hours.
                 for (long i = 0; i < Duration.of(24, HOURS).toMillis() && keepRunning; i += 1000) {
                     Thread.sleep(1000);
