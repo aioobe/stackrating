@@ -86,6 +86,8 @@ public class Main {
 
         reloadPlayerListCache();
         startSpark();
+
+        // Caution; Don't activate this unnecessarily during development (save the quota)
         contentUpdater.startLooping(Main::reloadPlayerListCache);
     }
 
