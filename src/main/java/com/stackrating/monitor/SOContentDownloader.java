@@ -23,7 +23,6 @@ import java.util.Properties;
 import static com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory.newInstance;
 import static com.google.code.stackexchange.schema.StackExchangeSite.STACK_OVERFLOW;
 import static com.stackrating.Main.formatInstant;
-import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.time.temporal.ChronoUnit.SECONDS;
 
 public class SOContentDownloader {
@@ -36,6 +35,7 @@ public class SOContentDownloader {
     Storage storage;
     TimedLock apiLock = new TimedLock();
     int lastSeenQuota = Integer.MAX_VALUE;
+    Game lastProcessed;
 
     public SOContentDownloader(Storage storage) throws IOException {
         this.storage = storage;
@@ -56,7 +56,6 @@ public class SOContentDownloader {
                                          "Refreshing/downloading questions...",
                                          Duration.between(from, visitTime).toHours());
         int questionsDownloadedSoFar = 0;
-        Game lastProcessed = null;
         while (true) {
             apiLock.acquire();
             PagedList<Question> questions = queryFactory.newQuestionApiQuery()
@@ -68,8 +67,9 @@ public class SOContentDownloader {
             lastSeenQuota = questions.getQuotaRemaining();
             apiLock.release(questions.getBackoff(), SECONDS);
 
-            // Are we done?
-            if (questions.isEmpty()) {
+            // Are we done? (Since we advance time to the point of the last game, we will
+            // unfortunately always receive the last processed game in the next query too.)
+            if (questions.isEmpty() || containsOnlyLastProcessed(questions)) {
                 logger.info("All questions in cycle period (" + formatInstant(from) + " - " + formatInstant(visitTime) + ") downloaded.");
                 break;
             }
@@ -89,9 +89,7 @@ public class SOContentDownloader {
             Instant nextT = lastProcessed.getPostTime().toInstant();
             storage.batchUpdateLastVisit(t, nextT, visitTime);
 
-            // Advance current point in time (+ 1ms to avoid getting the last processed game in the
-            // next query too)
-            t = nextT.plus(1, MILLIS);
+            // Advance current point in time
             progress.setProgress(Duration.between(from, t).toHours(),
                                  "quota: " + questions.getQuotaRemaining(),
                                  "time: " + formatInstant(t));
@@ -119,55 +117,12 @@ public class SOContentDownloader {
     public int getLastSeenQuota() {
         return lastSeenQuota;
     }
-/*
-    private void refreshExistingQuestions() throws InterruptedException {
-        System.out.println("Refreshing existing questions...");
-        Set<Game> nextVisitOverdue = storage.extractGamesWithNextVisitOverdue(100);
-        List<Integer> ids = nextVisitOverdue.stream().map(Game::getId).collect(toList());
-
-        if (nextVisitOverdue.isEmpty()) {
-            System.out.println("    No games with next visit overdue.");
-            return;
-        }
-
-        System.out.println("    Revisiting " + nextVisitOverdue.size() + " questions...");
-
-        Instant visitTime = Instant.now();
-
-        apiLock.acquire();
-        PagedList<Question> questions = queryFactory.newQuestionApiQuery()
-                                                    .withQuestionIds(toLongs(ids))
-                                                    .withFilter(FILTER)
-                                                    .withPaging(new Paging(1, 100))
-                                                    .list();
-        apiLock.release(questions.getBackoff(), ChronoUnit.SECONDS);
-
-        // Mark questions not found as deleted
-        Set<Integer> foundIds = getAllQuestionIds(questions);
-        ids.stream()
-           .filter(id -> !foundIds.contains(id))
-           .forEach(id -> deleteGame(id, visitTime));
-
-        processQuestionList(questions, visitTime);
-        System.out.println("Done refreshing existing questions.");
+    
+    private boolean containsOnlyLastProcessed(PagedList<Question> questions) {
+        return lastProcessed != null
+                && questions.size() == 1
+                && questions.get(0).getQuestionId() == lastProcessed.getId();
     }
-*/
-
-//    private Set<Integer> getAllQuestionIds(PagedList<Question> questions) {
-//        return questions.stream()
-//                        .map(q -> (int) q.getQuestionId())
-//                        .collect(toSet());
-//    }
-
-//    private void deleteGame(int gameId, Instant visitTime) {
-//        System.out.println("    Marking game " + gameId + " as deleted...");
-//        Game game = storage.getGame(gameId);
-//        storage.updateGame(game,
-//                           game.getTitle(),
-//                           visitTime,
-//                           computeNextVisit(visitTime, game),
-//                           true);
-//    }
 
     private Game processQuestion(Question q, Instant visitTime) {
 
