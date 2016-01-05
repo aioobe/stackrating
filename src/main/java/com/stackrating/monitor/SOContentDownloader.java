@@ -143,23 +143,24 @@ public class SOContentDownloader {
             }
 
             // 2. Update player
-            Player existing = storage.getPlayer((int) owner.getUserId());
+            Player existingPlayer = storage.getPlayer((int) owner.getUserId());
             Player player = new Player((int) owner.getUserId(),
                                        owner.getDisplayName(),
                                        (int) owner.getReputation(),
-                                       existing != null ? existing.getRating() : 1500,
-                                       0,  // needs to be recomputed anyway
-                                       0); // needs to be recomputed anyway
+                                       existingPlayer != null ? existingPlayer.getRating() : 1500,
+                                       existingPlayer != null ? existingPlayer.getRepPos() : 0,
+                                       existingPlayer != null ? existingPlayer.getRatingPos() : 0);
             storage.upsertUser(player);
 
             // 3. Find (or create) entry
             short newVotes = (short) (answer.getScore() + (answer.isIsAccepted() ? 1 : 0));
+            Entry existingEntry = storage.getEntry((int) answer.getAnswerId(), game.getId());
             Entry entry = new Entry((int) answer.getAnswerId(),
                                     player.getId(),
                                     game.getId(),
                                     newVotes,
                                     Timestamp.from(answer.getCreationDate().toInstant()),
-                                    0,
+                                    existingEntry != null ? existingEntry.getRatingDelta() : 0,
                                     null,
                                     null,
                                     null);
