@@ -90,6 +90,7 @@ public class SOContentDownloader {
             storage.batchUpdateLastVisit(t, nextT, visitTime);
 
             // Advance current point in time
+            t = nextT;
             progress.setProgress(Duration.between(from, t).toHours(),
                                  "quota: " + questions.getQuotaRemaining(),
                                  "time: " + formatInstant(t));
