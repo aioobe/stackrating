@@ -79,6 +79,9 @@ public class ContentUpdater {
         keepRunning = true;
         control.acquire();
         while (keepRunning) {
+
+            printMemoryUsage();
+
             doUpdateCycle();
 
             // Used to for instance reload caches.
@@ -99,6 +102,19 @@ public class ContentUpdater {
         control.release();
     }
     
+    private void printMemoryUsage() {
+        double mb = 1024*1024;
+        Runtime runtime = Runtime.getRuntime();
+        long totalMem = runtime.totalMemory();
+        long freeMem = runtime.freeMemory();
+        long maxMem = runtime.maxMemory();
+        logger.debug("Memory usage:");
+        logger.debug(String.format("    used: %.0f MB", (totalMem - freeMem) / mb));
+        logger.debug(String.format("    free: %.0f MB", freeMem / mb));
+        logger.debug(String.format("    total: %.0f MB", totalMem / mb));
+        logger.debug(String.format("    max: %.0f MB", maxMem / mb));
+    }
+
     public void shutdown() throws InterruptedException {
         keepRunning = false;
         control.acquire();
