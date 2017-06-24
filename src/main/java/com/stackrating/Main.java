@@ -51,19 +51,9 @@ public class Main {
     // requires 1 GB extra memory.
     static private PlayerListCache playerListCache = new PlayerListCache();
 
-    public static void main(String[] args) throws IOException, InterruptedException{
+    public static void main(String[] args) throws IOException, InterruptedException {
 
-        // For easy IDE-restarts
-        try { new Socket("localhost", 4568); Thread.sleep(1000); }
-        catch (ConnectException noPrevServerRunning) { }
-        new Thread(() -> {
-            try { new ServerSocket(4568).accept(); }
-            catch (IOException e) { }
-            try { shutdown(); }
-            catch (Exception e) { };
-        }).start();
-
-        // For graceful shutdown on Ctrl+C 
+        // For graceful shutdown on Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 shutdown();
