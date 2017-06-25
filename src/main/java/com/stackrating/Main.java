@@ -18,6 +18,9 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +34,7 @@ import static com.stackrating.Main.SortingPolicy.BY_REPUTATION;
 import static java.util.Comparator.comparing;
 import static spark.Spark.exception;
 import static spark.Spark.get;
+import static spark.SparkBase.secure;
 import static spark.SparkBase.staticFileLocation;
 
 
@@ -52,6 +56,18 @@ public class Main {
     static private PlayerListCache playerListCache = new PlayerListCache();
 
     public static void main(String[] args) throws IOException, InterruptedException {
+
+        if (args.length < 2) {
+            logger.error("Usage: java -jar stackrating.jar path/to/keystore.jks keystorepass");
+            System.exit(1);
+        }
+
+        String keystorePath = args[0];
+        String keystorePass = args[1];
+        if (!Files.exists(Paths.get(keystorePath))) {
+            logger.error("Keystore file not found: " + keystorePath);
+            System.exit(1);
+        }
 
         // For graceful shutdown on Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -75,7 +91,7 @@ public class Main {
         }
 
         reloadPlayerListCache();
-        startSpark();
+        startSpark(keystorePath, keystorePass);
 
         // Caution; Don't activate this unnecessarily during development (save the quota)
         contentUpdater.startLooping(Main::reloadPlayerListCache);
@@ -89,7 +105,9 @@ public class Main {
         logger.info("Player list cache loaded in " + (elapsedMs) / 1000 + " seconds.");
     }
 
-    private static void startSpark() {
+    private static void startSpark(String keystorePath, String keystorePass) {
+
+        secure(keystorePath, keystorePass, null, null);
 
         staticFileLocation("/static");
 
