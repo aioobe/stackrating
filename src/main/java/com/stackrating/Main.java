@@ -3,6 +3,7 @@ package com.stackrating;
 
 import com.stackrating.model.*;
 import com.stackrating.storage.Storage;
+import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.ModelAndView;
@@ -15,12 +16,9 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -94,7 +92,11 @@ public class Main {
         startSpark(keystorePath, keystorePass);
 
         // Caution; Don't activate this unnecessarily during development (save the quota)
-        contentUpdater.startLooping(Main::reloadPlayerListCache);
+        try {
+            contentUpdater.startLooping(Main::reloadPlayerListCache);
+        } catch (SQLException ex) {
+            logger.error("SQLException: " + ex.getMessage(), ex);
+        }
     }
 
     private static void reloadPlayerListCache() {
@@ -275,7 +277,11 @@ public class Main {
             String str = String.format("%.2f", player.getRating());
             Rectangle2D r = g.getFontMetrics().getStringBounds(str, g);
             g.drawString(str, (int) (bi.getWidth() - 3 - r.getWidth()), 20);
-            ImageIO.write(bi, "PNG", res.raw().getOutputStream());
+            try {
+                ImageIO.write(bi, "PNG", res.raw().getOutputStream());
+            } catch (IOException e) {
+                logger.warn("Could not write badge PNG response: " + e.getMessage());
+            }
             return null;
         });
         

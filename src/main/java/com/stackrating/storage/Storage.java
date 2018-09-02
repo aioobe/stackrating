@@ -14,9 +14,11 @@ import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Timestamp;
@@ -25,7 +27,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import static java.util.Comparator.comparing;
-import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.summingDouble;
 
@@ -38,7 +39,8 @@ public class Storage {
     public Storage() throws IOException {
         InputStream inputStream = Resources.getResourceAsStream("mybatis-config.xml");
         Properties dbProperties = new Properties();
-        dbProperties.load(Storage.class.getResourceAsStream("/db.properties"));
+        //dbProperties.load(Storage.class.getResourceAsStream("/db.properties"));
+        dbProperties.load(new FileReader("db.properties")/*Storage.class.getResourceAsStream("/db.properties")*/);
         sessionFactory = new SqlSessionFactoryBuilder().build(inputStream, dbProperties);
     }
 
