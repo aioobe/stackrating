@@ -7,14 +7,23 @@ services:
       POSTGRES_PASSWORD: jUBwsv2QeSj5bem
       POSTGRES_DB: stackrating
     volumes:
-      - ../data:/var/lib/postgresql/data
+      - ./data:/var/lib/postgresql/data
   service:
     image: openjdk:8u181-jre-slim
     volumes:
-      - ../dist:/opt/stackrating
+      - ./dist:/opt/stackrating
+    working_dir: /opt/stackrating
+    command: java -jar stackrating-0.0.1-SNAPSHOT.jar
     depends_on:
       - db
+  caddy:
+    image: abiosoft/caddy:0.11.0-no-stats
+    volumes:
+      - ./Caddyfile:/etc/Caddyfile
+    environment:
+     - ACME_AGREE=true
     ports:
-      - "4567:4567"
-    working_dir: /opt/stackrating
-    command: java -jar stackrating-0.0.1-SNAPSHOT.jar keystore.jks ucCU1Ha/rUHCso*U7HCeuHU
+      - "30080:80"
+      - "30443:443"
+    depends_on:
+      - service

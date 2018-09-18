@@ -1,0 +1,13 @@
+stackrating.com {
+    tls andreas.lundblad@gmail.com
+    proxy / service:4567 {
+        transparent
+    }
+    errors
+    log
+}
+
+www.stackrating.com {
+    redir https://stackrating.com{uri}
+    errors
+}

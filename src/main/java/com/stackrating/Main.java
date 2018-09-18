@@ -3,6 +3,7 @@ package com.stackrating;
 
 import com.stackrating.model.*;
 import com.stackrating.storage.Storage;
+import org.eclipse.jetty.http.HttpHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.ModelAndView;
@@ -11,6 +12,7 @@ import spark.Spark;
 import spark.template.freemarker.FreeMarkerEngine;
 
 import javax.imageio.ImageIO;
+import javax.servlet.http.HttpServletResponse;
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
