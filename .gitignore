@@ -3,8 +3,11 @@ target/
 dependency-reduced-pom.xml
 
 # IntelliJ
+*.ipr
 *.iml
+*.iws
 .idea/
+out/
 
 # Configuration
 src/main/resources/*.properties
