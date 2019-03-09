@@ -2,7 +2,6 @@ package com.stackrating;
 
 import com.stackrating.model.Game;
 import com.stackrating.monitor.SOContentDownloader;
-import com.stackrating.storage.RatingUpdater;
 import com.stackrating.storage.Storage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,10 +9,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
 import static com.stackrating.Main.formatInstant;
@@ -70,7 +65,7 @@ public class ContentUpdater {
     
     private void setCycleStartTime() {
         int cycleStartGameId = storage.getCycleStartGameId();
-        cycleStartGame = storage.getGame(cycleStartGameId);
+        cycleStartGame = storage.findGame(cycleStartGameId).get();
         logger.info("*** Starting new update cycle at "
                             + formatInstant(cycleStartGame.getPostTime().toInstant())
                             + " (game id " + cycleStartGameId + ")");

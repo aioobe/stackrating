@@ -16,8 +16,8 @@ import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Optional;
 import java.util.Properties;
 
 import static com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory.newInstance;
@@ -144,13 +144,14 @@ public class SOContentDownloader {
             }
 
             // 2. Update player
-            Player existingPlayer = storage.getPlayer((int) owner.getUserId());
-            Player player = new Player((int) owner.getUserId(),
-                                       owner.getDisplayName(),
-                                       (int) owner.getReputation(),
-                                       existingPlayer != null ? existingPlayer.getRating() : 1500,
-                                       existingPlayer != null ? existingPlayer.getRepPos() : 0,
-                                       existingPlayer != null ? existingPlayer.getRatingPos() : 0);
+            Optional<Player> existingPlayer = storage.findPlayer((int) owner.getUserId());
+            Player player = new Player(
+                    (int) owner.getUserId(),
+                    owner.getDisplayName(),
+                    (int) owner.getReputation(),
+                    existingPlayer.map(Player::getRating).orElse(1500.0),
+                    existingPlayer.map(Player::getRepPos).orElse(0),
+                    existingPlayer.map(Player::getRatingPos).orElse(0));
             storage.upsertUser(player);
 
             // 3. Find (or create) entry

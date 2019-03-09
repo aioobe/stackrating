@@ -86,17 +86,19 @@ public class Storage {
 //        }
 //    }
 
-    public Game getGame(int id) {
+    public Optional<Game> findGame(int id) {
         try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(GameMapper.class)
-                          .getGame(id);
+            return Optional.ofNullable(
+                    session.getMapper(GameMapper.class)
+                          .getGame(id));
         }
     }
 
-    public Player getPlayer(int id) {
+    public Optional<Player> findPlayer(int id) {
         try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class)
-                          .getPlayer(id);
+            return Optional.ofNullable(
+                    session.getMapper(PlayerMapper.class)
+                          .getPlayer(id));
         }
     }
 
@@ -221,11 +223,11 @@ public class Storage {
         }
     }
 
-    public List<Player> getAllPlayers() {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class).getAllPlayers();
-        }
-    }
+//    public List<Player> getAllPlayers() {
+//        try (SqlSession session = sessionFactory.openSession()) {
+//            return session.getMapper(PlayerMapper.class).getAllPlayers();
+//        }
+//    }
 
     public List<PlayerListCache.PlayerListEntry> getAllPlayerIdsAndPositions() {
         try (SqlSession session = sessionFactory.openSession()) {

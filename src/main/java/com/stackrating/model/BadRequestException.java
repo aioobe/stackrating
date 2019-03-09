@@ -1,5 +1,5 @@
 package com.stackrating.model;
 
-public class NotFoundException extends RuntimeException {
+public class BadRequestException extends RuntimeException {
 }
 

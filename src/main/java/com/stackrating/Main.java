@@ -3,7 +3,6 @@ package com.stackrating;
 
 import com.stackrating.model.*;
 import com.stackrating.storage.Storage;
-import org.eclipse.jetty.http.HttpHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.ModelAndView;
@@ -12,7 +11,6 @@ import spark.Spark;
 import spark.template.freemarker.FreeMarkerEngine;
 
 import javax.imageio.ImageIO;
-import javax.servlet.http.HttpServletResponse;
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
@@ -21,17 +19,14 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import static com.stackrating.Main.SortingPolicy.BY_RATING;
 import static com.stackrating.Main.SortingPolicy.BY_REPUTATION;
 import static java.util.Comparator.comparing;
-import static spark.Spark.exception;
-import static spark.Spark.get;
-import static spark.SparkBase.staticFileLocation;
+import static spark.Spark.*;
 
 
 public class Main {
@@ -95,7 +90,7 @@ public class Main {
 
     private static void startSpark() {
 
-        staticFileLocation("/static");
+        staticFiles.location("/static");
 
         get("/", (req, res) -> {
             res.redirect("/list/byRating");
@@ -104,12 +99,9 @@ public class Main {
 
         ////////////////////////////////////////////////////////////////////////////////////////////
         get("/rating/:userId", (req, res) -> {
-            int userId = parseIntOrThrow(req.params(":userId"), NotFoundException::new);
-            Player player = storage.getPlayer(userId);
-            if (player == null) {
-                throw new NotFoundException();
-            }
-            return String.format("%.2f", storage.getPlayer(userId).getRating());
+            int userId = parseIntParam(req, ":userId");
+            Player player = storage.findPlayer(userId).orElseThrow(NotFoundException::new);
+            return String.format("%.2f", player.getRating());
         });
 
         ////////////////////////////////////////////////////////////////////////////////////////////
@@ -141,7 +133,7 @@ public class Main {
             pageParam = clamp(1, pageParam, numPages);
 
             // Handle search query
-            Player highlightedPlayer = null;
+            Optional<Player> highlightedPlayer = Optional.empty();
             String searchQuery = req.queryParams("userId");
             if (searchQuery != null) {
                 searchQuery = searchQuery.trim();
@@ -149,13 +141,14 @@ public class Main {
                     // Do nothing
                 } else {
                     int soughtUserId = Integer.parseInt(searchQuery);
-                    highlightedPlayer = storage.getPlayer(soughtUserId);
+                    highlightedPlayer = storage.findPlayer(soughtUserId);
                 }
             }
             // Set current page
             int currentPage;
-            if (highlightedPlayer != null) {
-                int pos = sortingPolicy == BY_RATING ? highlightedPlayer.getRatingPos() : highlightedPlayer.getRepPos();
+            if (highlightedPlayer.isPresent()) {
+                Player player = highlightedPlayer.get();
+                int pos = sortingPolicy == BY_RATING ? player.getRatingPos() : player.getRepPos();
                 currentPage = ((pos - 1) / USERS_PER_PAGE) + 1;
             } else {
                 currentPage = pageParam;
@@ -174,7 +167,7 @@ public class Main {
             attrs.put("numPages", numPages);
             attrs.put("sortBy", sortingPolicy == BY_RATING ? "rating" : "rep");
             attrs.put("userNotFound", searchQuery != null && searchQuery.length() > 0 && highlightedPlayer == null);
-            attrs.put("highlightedUser", highlightedPlayer == null ? -2 : highlightedPlayer.getId());
+            attrs.put("highlightedUser", highlightedPlayer.map(Player::getId).orElse(-2));
             attrs.put("users", usersOnThisPage);
 
             // Return page
@@ -186,10 +179,8 @@ public class Main {
         get("/user/:userId", (req, res) -> {
 
             // Load content
-            int userId = parseIntOrThrow(req.params(":userId"), NotFoundException::new);
-            Player player = storage.getPlayer(userId);
-            if (player == null)
-                throw new NotFoundException();
+            int userId = parseIntParam(req, ":userId");
+            Player player = storage.findPlayer(userId).orElseThrow(NotFoundException::new);
 
             int numEntries = storage.getEntryCountForUser(userId);
             int numPages = (int) Math.ceil((double) numEntries / ENTRIES_PER_PAGE);
@@ -216,10 +207,8 @@ public class Main {
         get("/question/:gameId", (req, res) -> {
 
             // Load content
-            int gameId = parseIntOrThrow(req.params(":gameId"), NotFoundException::new);
-            Game game = storage.getGame(gameId);
-            if (game == null)
-                throw new NotFoundException();
+            int gameId = parseIntParam(req, ":gameId");
+            Game game = storage.findGame(gameId).orElseThrow(NotFoundException::new);
 
             List<Entry> entries = storage.getEntriesForGame(gameId);
             entries.sort(comparing(Entry::getVotes).reversed());
@@ -236,10 +225,8 @@ public class Main {
 
         get("/badge/:userId", (req, res) -> {
 
-            int userId = parseIntOrThrow(req.params(":userId"), NotFoundException::new);
-            Player player = storage.getPlayer(userId);
-            if (player == null)
-                throw new NotFoundException();
+            int userId = parseIntParam(req, ":userId");
+            Player player = storage.findPlayer(userId).orElseThrow(NotFoundException::new);
 
             Image template = ImageIO.read(Main.class.getResourceAsStream("/badge.png"));
 
@@ -269,12 +256,15 @@ public class Main {
             return null;
         });
         
-        exception(NotFoundException.class, (e, request, response) -> {
-            response.status(404);
-            response.body("Resource not found");
-        });
+        exception(BadRequestException.class, (e, req, res) -> res.status(400));
+        exception(NotFoundException.class, (e, req, res) -> res.status(404));
     }
-    
+
+    private static int parseIntParam(Request req, String param) {
+        return parseInt(req.params(param))
+                .orElseThrow(BadRequestException::new);
+    }
+
     private static void shutdown() throws InterruptedException {
         // Shutdown ContentUpdater first since a graceful shutdown may take a long while and we can
         // just as well continue to serve requests meanwhile.
@@ -337,11 +327,11 @@ public class Main {
     }
 */
 
-    public static <T extends Exception> int parseIntOrThrow(String str, Supplier<T> exSup) throws T {
+    private static Optional<Integer> parseInt(String str) {
         try {
-            return Integer.parseInt(str);
+            return Optional.of(Integer.parseInt(str));
         } catch (NumberFormatException nfe) {
-            throw exSup.get();
+            return Optional.empty();
         }
     }
 
