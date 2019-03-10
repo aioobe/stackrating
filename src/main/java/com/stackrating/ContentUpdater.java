@@ -75,7 +75,7 @@ public class ContentUpdater {
     
     private void setCycleStartTime() {
         try (NonThrowingCloseable c = storage.openSession()) {
-            logger.info("Figuring out cycle starting point...");
+            logger.info("Figuring out refresh cycle starting point...");
             int cycleStartGameId = storage.getCycleStartGameId();
             cycleStartGame = storage.findGame(cycleStartGameId).get();
             logger.info("Starting new update cycle at {} (game id {})",

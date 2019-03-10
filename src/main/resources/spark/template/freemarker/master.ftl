@@ -9,6 +9,8 @@
     <html>
         <head>
             <title>StackRating</title>
+            <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+            <link rel="icon" href="/favicon.ico" type="image/x-icon">
             <style>
                 body {
                     color: #333333;
