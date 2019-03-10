@@ -90,6 +90,9 @@ public class SOContentDownloader {
 
                 for (Question q : questions) {
                     lastProcessed = processQuestion(q, visitTime);
+                    if (!keepRunning.get()) {
+                        break;
+                    }
                 }
 
                 // Some games may have been deleted. These games will not be returned in this query,

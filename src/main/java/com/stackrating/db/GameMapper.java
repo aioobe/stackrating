@@ -11,5 +11,7 @@ public interface GameMapper {
     void updateGame(Game game);
     int getMaxGameId();
     int getCycleStartGameId();
-    void batchUpdateLastVisit(@Param("from") Timestamp from, @Param("to") Timestamp to, @Param("lastVisit") Timestamp lastVisit);
+    void batchUpdateLastVisit(@Param("from") Timestamp from,
+                              @Param("to") Timestamp to,
+                              @Param("lastVisit") Timestamp lastVisit);
 }

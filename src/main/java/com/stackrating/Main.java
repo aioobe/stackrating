@@ -20,6 +20,8 @@ import java.util.function.Function;
 
 import static com.stackrating.SortingPolicy.BY_RATING;
 import static com.stackrating.SortingPolicy.BY_REPUTATION;
+import static com.stackrating.Util.clamp;
+import static com.stackrating.Util.parseInt;
 import static java.util.Comparator.comparing;
 import static spark.Spark.*;
 
@@ -119,13 +121,14 @@ public class Main {
             SortingPolicy sortBy = req.params(":sort").equals("byRating") ? BY_RATING : BY_REPUTATION;
             int userCount = playerListCache.getUserCount();
             int numPages = (int) Math.ceil((double) userCount / USERS_PER_PAGE);
-            int currentPage = Util.parseInt(req.queryParams("page")).orElse(1);
-            currentPage = Util.clamp(1, currentPage, numPages);
+            int currentPage = parseInt(req.queryParams("page")).orElse(1);
+            currentPage = clamp(1, currentPage, numPages);
 
             // Handle search query
             Optional<Player> highlightedPlayer = Optional.empty();
-            String searchQuery = req.queryParams("userId").trim();
+            String searchQuery = req.queryParams("userId");
             if (searchQuery != null) {
+                searchQuery = searchQuery.trim();
                 try {
                     int soughtUserId = Integer.parseInt(searchQuery);
                     highlightedPlayer = storage.findPlayer(soughtUserId);
@@ -173,8 +176,8 @@ public class Main {
 
             int numEntries = storage.getEntryCountForUser(userId);
             int numPages = (int) Math.ceil((double) numEntries / ENTRIES_PER_PAGE);
-            int currentPage = Util.parseInt(req.queryParams("page")).orElse(1);
-            currentPage = Util.clamp(1, currentPage, numPages);
+            int currentPage = parseInt(req.queryParams("page")).orElse(1);
+            currentPage = clamp(1, currentPage, numPages);
 
             List<TimeDataPoint> ratingGraph = storage.getRatingGraph(userId);
             List<Entry> entriesOnThisPage = storage.getEntriesPage(userId, currentPage, ENTRIES_PER_PAGE);
@@ -250,7 +253,7 @@ public class Main {
     }
 
     private static int parseIntParam(Request req, String param) {
-        return Util.parseInt(req.params(param))
+        return parseInt(req.params(param))
                 .orElseThrow(BadRequestException::new);
     }
 
@@ -262,29 +265,5 @@ public class Main {
 
         logger.info("Shutting down Spark...");
         Spark.stop();
-    }
-
-    // index of the search key, if it is contained in the array; otherwise, (-(insertion point) - 1)
-    public static <T, K extends Comparable<K>> int findIndex(List<T> sortedList, K key, Function<T, K> f) {
-        int low = 0;
-        int high = sortedList.size() - 1;
-        while (low <= high) {
-            int mid = (low + high) >>> 1;
-            T t = sortedList.get(mid);
-            int cmp = f.apply(t).compareTo(key);
-            if (cmp < 0) {
-                low = mid + 1;
-            } else if (cmp > 0) {
-                high = mid - 1;
-            } else {
-                return mid;
-            }
-        }
-        return -(low + 1);
-    }
-
-    public static <T, K extends Comparable<K>> T find(List<T> sortedList, K key, Function<T, K> f) {
-        int i = findIndex(sortedList, key, f);
-        return i < 0 ? null : sortedList.get(i);
     }
 }
