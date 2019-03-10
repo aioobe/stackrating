@@ -248,8 +248,6 @@ public class Main {
             return res.raw();
         });
 
-        get("/robots.txt", (req, res) -> "User-agent: *\nDisallow:\n");
-
         exception(BadRequestException.class, (e, req, res) -> res.status(400));
         exception(NotFoundException.class, (e, req, res) -> res.status(404));
     }
