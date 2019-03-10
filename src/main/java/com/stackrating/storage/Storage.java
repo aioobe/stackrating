@@ -76,27 +76,6 @@ public class Storage {
                 .getEntriesForGame(gameId);
     }
 
-//    public void storeUser(Player p) {
-//        try (SqlSession session = sessionFactory.openSession()) {
-//            session.getMapper(PlayerMapper.class)
-//                    .storeUser(p);
-//        }
-//    }
-
-//    public void storeGame(Game game) {
-//        try (SqlSession session = sessionFactory.openSession()) {
-//            session.getMapper(GameMapper.class)
-//                    .storeGame(game);
-//        }
-//    }
-
-//    public void storeEntry(PlayerListEntry entry) {
-//        try (SqlSession session = sessionFactory.openSession()) {
-//            session.getMapper(EntryMapper.class)
-//                   .storeEntry(entry);
-//        }
-//    }
-
     public Optional<Game> findGame(int id) {
         return Optional.ofNullable(getMapper(GameMapper.class).getGame(id));
     }
@@ -133,13 +112,6 @@ public class Storage {
     private static long truncateTimestamp(TimeDataPoint rd) {
         return rd.getTimestamp() - rd.getTimestamp() % ChronoUnit.DAYS.getDuration().toMillis();
     }
-    
-//    public void setVotes(int entryId, int newVotes) {
-//        try (SqlSession session = sessionFactory.openSession()) {
-//            session.getMapper(EntryMapper.class)
-//                   .setVotes(entryId, newVotes);
-//        }
-//    }
 
     public void rejudgeGames(int fromGameId) {
         new RatingUpdater(session.get()).recalcRatings(fromGameId);
@@ -186,10 +158,6 @@ public class Storage {
         } else {
             entryMapper.updateEntry(entry);
         }
-    }
-
-    public void updateEntry(Entry entry) {
-        getMapper(EntryMapper.class).updateEntry(entry);
     }
 
     public Entry getEntry(int id, int gameId) {

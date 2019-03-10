@@ -14,9 +14,10 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
-import java.util.*;
-import java.util.function.Function;
+import java.util.Map;
+import java.util.Optional;
 
 import static com.stackrating.SortingPolicy.BY_RATING;
 import static com.stackrating.SortingPolicy.BY_REPUTATION;
@@ -27,11 +28,12 @@ import static spark.Spark.*;
 
 public class Main {
 
-    private static final boolean DEV_MODE = false;
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
-    final static int USERS_PER_PAGE = 50;
-    final static int ENTRIES_PER_PAGE = 50;
+    private final static int USERS_PER_PAGE = 50;
+    private final static int ENTRIES_PER_PAGE = 50;
+
+    public static volatile boolean shutdownRequested = false;
 
     static private Storage storage;
     static private ContentUpdater contentUpdater;
@@ -44,8 +46,7 @@ public class Main {
             try {
                 shutdown();
             } catch (Exception e) {
-                logger.error("Failed graceful shutdown.", e);
-                e.printStackTrace();
+                logger.error("Graceful shutdown failed.", e);
             }
         }));
 
@@ -64,10 +65,8 @@ public class Main {
         reloadPlayerListCache();
         startSpark();
 
-        // Save quota! Don't run in dev mode.
-        if (!DEV_MODE) {
-            contentUpdater.startLooping(Main::reloadPlayerListCache);
-        }
+        // Save quota! Don't run when developing.
+        contentUpdater.startLooping(Main::reloadPlayerListCache);
     }
 
     private static void reloadPlayerListCache() {
@@ -258,10 +257,13 @@ public class Main {
     }
 
     private static void shutdown() throws InterruptedException {
+
+        shutdownRequested = true;
+
         // Shutdown ContentUpdater first since a graceful shutdown may take a long while and we can
         // just as well continue to serve requests meanwhile.
-        logger.info("Shutting down ContentUpdater...");
-        contentUpdater.shutdown();
+        logger.info("Waiting for content updater to shut down...");
+        contentUpdater.awaitShutdown();
 
         logger.info("Shutting down Spark...");
         Spark.stop();

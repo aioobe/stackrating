@@ -4,6 +4,7 @@ import com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory;
 import com.google.code.stackexchange.common.PagedList;
 import com.google.code.stackexchange.schema.*;
 import com.google.code.stackexchange.schema.Question.SortOrder;
+import com.stackrating.Main;
 import com.stackrating.log.Progress;
 import com.stackrating.model.Entry;
 import com.stackrating.model.Game;
@@ -57,15 +58,15 @@ public class SOContentDownloader {
         this.queryFactory = newInstance(appKey, STACK_OVERFLOW);
     }
 
-    public void refreshQuestions(Instant from, AtomicBoolean keepRunning)
-            throws InterruptedException {
-        
+    public void refreshQuestions(Instant from) throws InterruptedException {
+        logger.info("Refreshing/downloading new questions...");
+
         Instant t = from;
         Instant visitTime = Instant.now();
         Progress progress = new Progress(logger,
                                          "Refreshing/downloading questions...",
                                          Duration.between(from, visitTime).toHours());
-        while (keepRunning.get()) {
+        outer: while (!Main.shutdownRequested) {
             apiLock.acquire();
             PagedList<Question> questions = queryFactory
                     .newQuestionApiQuery()
@@ -82,7 +83,8 @@ public class SOContentDownloader {
             // unfortunately always receive the last processed game in the next query too.)
             if (questions.isEmpty() || containsOnlyLastProcessed(questions)) {
                 logger.info("All questions in cycle period ({} - {}) downloaded",
-                        formatInstant(from), formatInstant(visitTime));
+                        formatInstant(from),
+                        formatInstant(visitTime));
                 break;
             }
 
@@ -90,8 +92,8 @@ public class SOContentDownloader {
 
                 for (Question q : questions) {
                     lastProcessed = processQuestion(q, visitTime);
-                    if (!keepRunning.get()) {
-                        break;
+                    if (Main.shutdownRequested) {
+                        break outer;
                     }
                 }
 
@@ -122,14 +124,15 @@ public class SOContentDownloader {
         logger.info("Remaining quota after refreshQuestions: " + lastSeenQuota);
     }
 
-    public void refreshPlayers(AtomicBoolean keepRunning) throws InterruptedException {
+    public void refreshPlayers() throws InterruptedException {
+        logger.info("Refreshing/downloading player information...");
         int initialQuotaRemaining = lastSeenQuota;
         Progress progress = new Progress(logger,
                 "Refreshing/downloading player information...",
                 lastSeenQuota - MIN_QUOTA);
 
         // This will loop until we're too low on quota
-        while (keepRunning.get()) {
+        while (!Main.shutdownRequested) {
             apiLock.acquire();
             PagedList<User> users = queryFactory.newUserApiQuery()
                     .withSort(User.SortOrder.MOST_REPUTED)

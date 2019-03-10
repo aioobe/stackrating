@@ -31,7 +31,6 @@ public class ContentUpdater {
 
     // For graceful shutdowns
     SOContentDownloader contentDownloader;
-    private AtomicBoolean keepRunning = new AtomicBoolean(true);
     private Semaphore control = new Semaphore(1);
 
     public ContentUpdater(Storage storage) throws IOException {
@@ -45,12 +44,16 @@ public class ContentUpdater {
     // This means that a question whose lastVisit time is less than postTime + 90 days should be
     // revisited.
 
-    public void doUpdateCycle(AtomicBoolean keepRunning) throws InterruptedException {
+    public void doUpdateCycle() throws InterruptedException {
         setCycleStartTime();
-        logger.info("Refreshing/downloading new questions...");
-        contentDownloader.refreshQuestions(cycleStartGame.getPostTime().toInstant(), keepRunning);
-        logger.info("Refreshing/downloading player information...");
-        contentDownloader.refreshPlayers(keepRunning);
+        contentDownloader.refreshQuestions(cycleStartGame.getPostTime().toInstant());
+        if (Main.shutdownRequested) {
+            return;
+        }
+        contentDownloader.refreshPlayers();
+        if (Main.shutdownRequested) {
+            return;
+        }
         doDatabaseFixup(cycleStartGame.getId());
     }
     
@@ -60,7 +63,9 @@ public class ContentUpdater {
         try (NonThrowingCloseable c = storage.openSession()) {
             storage.updateRepPositions();
         }
-
+        if (Main.shutdownRequested) {
+            return;
+        }
         try (NonThrowingCloseable c = storage.openSession()) {
             // Update rating_deltas in entries and all ratings and rating positions for the players.
             logger.info("Recalculating rating deltas from game " + fromGameId + " onwards...");
@@ -70,40 +75,51 @@ public class ContentUpdater {
     
     private void setCycleStartTime() {
         try (NonThrowingCloseable c = storage.openSession()) {
+            logger.info("Figuring out cycle starting point...");
             int cycleStartGameId = storage.getCycleStartGameId();
             cycleStartGame = storage.findGame(cycleStartGameId).get();
-            logger.info("*** Starting new update cycle at "
-                    + formatInstant(cycleStartGame.getPostTime().toInstant())
-                    + " (game id " + cycleStartGameId + ")");
+            logger.info("Starting new update cycle at {} (game id {})",
+                    formatInstant(cycleStartGame.getPostTime().toInstant()),
+                    cycleStartGameId);
         }
     }
 
     public void startLooping(Runnable endOfCycleCallback) throws InterruptedException {
-        control.acquire();
-        while (keepRunning.get()) {
+        try {
+            control.acquire();
+            while (!Main.shutdownRequested) {
 
-            printMemoryUsage();
+                printMemoryUsage();
 
-            doUpdateCycle(keepRunning);
+                doUpdateCycle();
 
-            // Used to for instance reload caches.
-            endOfCycleCallback.run();
+                if (Main.shutdownRequested) {
+                    return;
+                }
 
-            // Currently, we have a daily quota on 10000, and one cycle consumes ~6000. 1 cycle a
-            // day is acceptable right now, so we're fine. The code below avoids an endless CPU and
-            // disk hogging cycle where we download just a few questions and then refresh the entire
-            // database over and over again.
-            if (contentDownloader.getLastSeenQuota() < 1000) {
-                logger.info("Low on quota. Sleeping for 24 hours.");
-                // Sleep for 24 hours.
-                long leftToSleep = Duration.of(24, HOURS).toMillis();
-                while (leftToSleep > 0 && keepRunning.get()) {
-                    Thread.sleep(1000);
-                    leftToSleep -= 1000;
+                // Used to for instance reload caches.
+                endOfCycleCallback.run();
+
+                // Currently, we have a daily quota on 10000, and one cycle consumes ~6000. 1 cycle a
+                // day is acceptable right now, so we're fine. The code below avoids an endless CPU and
+                // disk hogging cycle where we download just a few questions and then refresh the entire
+                // database over and over again.
+                if (contentDownloader.getLastSeenQuota() < 1000) {
+                    logger.info("Low on quota. Sleeping for 24 hours.");
+                    // Sleep for 24 hours.
+                    long leftToSleep = Duration.of(24, HOURS).toMillis();
+                    while (leftToSleep > 0) {
+                        if (Main.shutdownRequested) {
+                            return;
+                        }
+                        Thread.sleep(500);
+                        leftToSleep -= 500;
+                    }
                 }
             }
+        } finally {
+            control.release();
         }
-        control.release();
     }
     
     private void printMemoryUsage() {
@@ -119,8 +135,7 @@ public class ContentUpdater {
         logger.debug(String.format("    max: %.0f MB", maxMem / mb));
     }
 
-    public void shutdown() throws InterruptedException {
-        keepRunning.set(false);
+    public void awaitShutdown() throws InterruptedException {
         control.acquire();
     }
 }
