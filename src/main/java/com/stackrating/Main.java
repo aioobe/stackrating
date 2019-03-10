@@ -14,6 +14,7 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -239,14 +240,16 @@ public class Main {
             String str = String.format("%.2f", player.getRating());
             Rectangle2D r = g.getFontMetrics().getStringBounds(str, g);
             g.drawString(str, (int) (bi.getWidth() - 3 - r.getWidth()), 20);
-            try {
-                ImageIO.write(bi, "PNG", res.raw().getOutputStream());
+            try (OutputStream os = res.raw().getOutputStream()) {
+                ImageIO.write(bi, "PNG", os);
             } catch (IOException e) {
                 logger.warn("Could not write badge PNG response: " + e.getMessage());
             }
-            return null;
+            return res.raw();
         });
-        
+
+        get("/robots.txt", (req, res) -> "User-agent: *\nDisallow:\n");
+
         exception(BadRequestException.class, (e, req, res) -> res.status(400));
         exception(NotFoundException.class, (e, req, res) -> res.status(404));
     }
