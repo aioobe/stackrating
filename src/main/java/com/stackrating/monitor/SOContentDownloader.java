@@ -70,30 +70,38 @@ public class SOContentDownloader {
             // Are we done? (Since we advance time to the point of the last game, we will
             // unfortunately always receive the last processed game in the next query too.)
             if (questions.isEmpty() || containsOnlyLastProcessed(questions)) {
-                logger.info("All questions in cycle period (" + formatInstant(from) + " - " + formatInstant(visitTime) + ") downloaded.");
+                logger.info("All questions in cycle period ({} - {}) downloaded",
+                        formatInstant(from), formatInstant(visitTime));
                 break;
             }
 
-            for (Question q : questions) {
-                lastProcessed = processQuestion(q, visitTime);
-                questionsDownloadedSoFar++;
+            try {
+                storage.openSession();
+
+                for (Question q : questions) {
+                    lastProcessed = processQuestion(q, visitTime);
+                    questionsDownloadedSoFar++;
+                }
+
+                // Some games may have been deleted. These games will not be returned in this query,
+                // which means their lastVisit will be unchanged. This causes the cycle to reset to
+                // this game over and over again. We could either use a different query for existing
+                // games (fetching based on question ids) and detect deleted questions and take the
+                // deleted flag into account when figuring out the start of the update cycle. But this
+                // feels like a lot of book keeping so for now we batch update lastVisit for the given
+                // time range instead.
+                Instant nextT = lastProcessed.getPostTime().toInstant();
+                storage.batchUpdateLastVisit(t, nextT, visitTime);
+
+                // Advance current point in time
+                t = nextT;
+                progress.setProgress(Duration.between(from, t).toHours(),
+                        "quota: " + questions.getQuotaRemaining(),
+                        "time: " + formatInstant(t));
+
+            } finally {
+                storage.closeSession();
             }
-
-            // Some games may have been deleted. These games will not be returned in this query,
-            // which means their lastVisit will be unchanged. This causes the cycle to reset to
-            // this game over and over again. We could either use a different query for existing
-            // games (fetching based on question ids) and detect deleted questions and take the
-            // deleted flag into account when figuring out the start of the update cycle. But this
-            // feels like a lot of book keeping so for now we batch update lastVisit for the given
-            // time range instead.
-            Instant nextT = lastProcessed.getPostTime().toInstant();
-            storage.batchUpdateLastVisit(t, nextT, visitTime);
-
-            // Advance current point in time
-            t = nextT;
-            progress.setProgress(Duration.between(from, t).toHours(),
-                                 "quota: " + questions.getQuotaRemaining(),
-                                 "time: " + formatInstant(t));
 
             if (questions.getQuotaRemaining() < 100) {
                 logger.info("Low on quota. Enough downloading for now.");

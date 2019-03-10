@@ -21,15 +21,6 @@
         </constructor>
     </resultMap>
     
-    <!-- This is used as a cache for showing pages of the players lists -->
-    <resultMap id="id_and_positions" type="com.stackrating.PlayerListCache$PlayerListEntry">
-        <constructor>
-            <idArg column="id" javaType="_int" />
-            <arg column="rep_pos" javaType="_int" />
-            <arg column="rating_pos" javaType="_int" />
-        </constructor>
-    </resultMap>
-    
     <select id="getPlayer" resultMap="player">
         SELECT
             id,
@@ -42,38 +33,11 @@
         WHERE id = #{id}
     </select>
 
-    <select id="getAllPlayers" resultMap="player">
-        SELECT
-            id,
-            TRIM(display_name) AS display_name,
-            rep,
-            rating,
-            rep_pos,
-            rating_pos
-        FROM players
-    </select>
-
-    <select id="getNumPlayers" resultType="int">
+    <select id="getNumPlayers" resultType="_int">
         SELECT COUNT(*)
         FROM players
     </select>
 
-    <!-- Using ROW_NUMBER instead of RANK to be able to look at {rep, rating}_pos to determine page -->
-    <!-- Since the introduction of PlayerListCache, this method is no longer used
-    <select id="getUsersPage" resultMap="player">
-        SELECT
-            id,
-            TRIM(display_name) AS display_name,
-            rep,
-            rating,
-            rep_pos,   (previously: ROW_NUMBER() OVER (ORDER BY rep DESC, id) AS rep_pos)
-            rating_pos (previously: ROW_NUMBER() OVER (ORDER BY rating DESC, id) AS rating_pos)
-        FROM players
-        ORDER BY ${orderBy} DESC, id
-        OFFSET #{pageSize} * (#{page} - 1)
-        LIMIT #{pageSize}
-    </select> -->
-    
     <insert id="insertPlayer">
         INSERT INTO players(id, display_name, rep, rating, rep_pos, rating_pos)
         VALUES (#{id}, #{displayName}, #{rep}, 1500, -1, -1)
@@ -128,9 +92,10 @@
         FROM players
     </select>
 
-    <select id="getPlayerListIds" resultMap="id_and_positions">
-        SELECT id, rep_pos, rating_pos
+    <select id="getAllPlayerIds" resultType="int">
+        SELECT id
         FROM players
+        ORDER BY ${orderBy} DESC, id
     </select>
 
     <select id="getPlayers" resultMap="player">

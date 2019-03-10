@@ -1,6 +1,6 @@
 package com.stackrating.storage;
 
-import com.stackrating.PlayerListCache;
+import com.stackrating.SortingPolicy;
 import com.stackrating.db.EntryMapper;
 import com.stackrating.db.GameMapper;
 import com.stackrating.db.PlayerMapper;
@@ -9,15 +9,16 @@ import com.stackrating.model.Entry;
 import com.stackrating.model.Game;
 import com.stackrating.model.Player;
 import com.stackrating.model.TimeDataPoint;
+import org.apache.ibatis.cursor.Cursor;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
-import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,35 +35,45 @@ public class Storage {
 
     private final static Logger logger = LoggerFactory.getLogger(Storage.class);
 
-    SqlSessionFactory sessionFactory;
+    private final SqlSessionFactory sessionFactory;
+
+    ThreadLocal<SqlSession> session = new ThreadLocal<>();
 
     public Storage() throws IOException {
         InputStream inputStream = Resources.getResourceAsStream("mybatis-config.xml");
         Properties dbProperties = new Properties();
-        //dbProperties.load(Storage.class.getResourceAsStream("/db.properties"));
-        dbProperties.load(new FileReader("db.properties")/*Storage.class.getResourceAsStream("/db.properties")*/);
+        dbProperties.load(new FileReader("db.properties"));
         sessionFactory = new SqlSessionFactoryBuilder().build(inputStream, dbProperties);
     }
 
+    public Closeable openSession() {
+        session.set(sessionFactory.openSession(ExecutorType.BATCH, true));
+        return this::closeSession;
+    }
+
+    public void closeSession() {
+        session.get().close();
+        session.remove();
+    }
+
+    // Convenience method
+    public <T> T getMapper(Class<T> mapperClass) {
+        return session.get().getMapper(mapperClass);
+    }
+
     public int getUserCount() {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class)
-                          .getNumPlayers();
-        }
+        return getMapper(PlayerMapper.class)
+                .getNumPlayers();
     }
 
     public int getEntryCountForUser(int userId) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(EntryMapper.class)
-                          .getEntryCountForUser(userId);
-        }
+        return getMapper(EntryMapper.class)
+                .getEntryCountForUser(userId);
     }
 
     public List<Entry> getEntriesForGame(int gameId) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(EntryMapper.class)
-                          .getEntriesForGame(gameId);
-        }
+        return getMapper(EntryMapper.class)
+                .getEntriesForGame(gameId);
     }
 
 //    public void storeUser(Player p) {
@@ -87,66 +98,37 @@ public class Storage {
 //    }
 
     public Optional<Game> findGame(int id) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return Optional.ofNullable(
-                    session.getMapper(GameMapper.class)
-                          .getGame(id));
-        }
+        return Optional.ofNullable(getMapper(GameMapper.class).getGame(id));
     }
 
     public Optional<Player> findPlayer(int id) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return Optional.ofNullable(
-                    session.getMapper(PlayerMapper.class)
-                          .getPlayer(id));
-        }
+        return Optional.ofNullable(getMapper(PlayerMapper.class).getPlayer(id));
     }
-
-    /* Since the introduction of PlayerListCache the two methods below are no longer used.
-    public List<Player> getByRatingPage(int page, int pageSize) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class)
-                          .getUsersPage("rating", page, pageSize);
-        }
-    }
-
-    public List<Player> getByRepPage(int page, int pageSize) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class)
-                    .getUsersPage("rep", page, pageSize);
-        }
-    }
-    */
 
     public List<TimeDataPoint> getRatingGraph(int userId) {
-        try (SqlSession session = sessionFactory.openSession()) {
+        EntryMapper entryMapper = getMapper(EntryMapper.class);
             
-            EntryMapper entryMapper = session.getMapper(EntryMapper.class);
-            
-            TreeMap<Long, Double> deltaPerDay =
-                    entryMapper.getRatingDeltas(userId)
-                               .stream()
-                               .filter(tdp -> tdp.getVal() != 0)
-                               .collect(groupingBy(Storage::truncateTimestamp,
-                                                   TreeMap::new,
-                                                   summingDouble(TimeDataPoint::getVal)));
-            
-            List<TimeDataPoint> absoluteRatings = new ArrayList<>();
-            double rating = 1500;
-            for (Map.Entry<Long, Double> entry : deltaPerDay.entrySet()) {
-                rating += entry.getValue();
-                absoluteRatings.add(new TimeDataPoint(entry.getKey() / 1000, rating));
-            }
-            
-            return absoluteRatings;
+        TreeMap<Long, Double> deltaPerDay =
+                entryMapper.getRatingDeltas(userId)
+                        .stream()
+                        .filter(tdp -> tdp.getVal() != 0)
+                        .collect(groupingBy(Storage::truncateTimestamp,
+                                TreeMap::new,
+                                summingDouble(TimeDataPoint::getVal)));
+
+        List<TimeDataPoint> absoluteRatings = new ArrayList<>();
+        double rating = 1500;
+        for (Map.Entry<Long, Double> entry : deltaPerDay.entrySet()) {
+            rating += entry.getValue();
+            absoluteRatings.add(new TimeDataPoint(entry.getKey() / 1000, rating));
         }
+
+        return absoluteRatings;
     }
 
     public List<Entry> getEntriesPage(int userId, int page, int pageSize) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(EntryMapper.class)
-                          .getEntriesPage(userId, page, pageSize);
-        }
+        return getMapper(EntryMapper.class)
+                .getEntriesPage(userId, page, pageSize);
     }
 
     private static long truncateTimestamp(TimeDataPoint rd) {
@@ -161,9 +143,7 @@ public class Storage {
 //    }
 
     public void rejudgeGames(int fromGameId) {
-        try (SqlSession session = sessionFactory.openSession(ExecutorType.BATCH)) {
-            new RatingUpdater(session).recalcRatings(fromGameId);
-        }
+        new RatingUpdater(session.get()).recalcRatings(fromGameId);
     }
 
     /** Create or update existing game. */
@@ -171,14 +151,12 @@ public class Storage {
         if (game.getTitle().length() > 100) {
             game.setTitle(game.getTitle().substring(0, 100));
         }
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            GameMapper gameMapper = session.getMapper(GameMapper.class);
-            Game existing = gameMapper.getGame(game.getId());
-            if (existing == null) {
-                gameMapper.insertGame(game);
-            } else {
-                gameMapper.updateGame(game);
-            }
+        GameMapper gameMapper = getMapper(GameMapper.class);
+        Game existing = gameMapper.getGame(game.getId());
+        if (existing == null) {
+            gameMapper.insertGame(game);
+        } else {
+            gameMapper.updateGame(game);
         }
     }
 
@@ -187,40 +165,32 @@ public class Storage {
         if (player.getDisplayName().length() > 40) {
             player.setDisplayName(player.getDisplayName().substring(0, 40));
         }
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            PlayerMapper playerMapper = session.getMapper(PlayerMapper.class);
-            Player existing = playerMapper.getPlayer(player.getId());
-            if (existing == null) {
-                playerMapper.insertPlayer(player);
-            } else {
-                playerMapper.updatePlayer(player);
-            }
+        PlayerMapper playerMapper = getMapper(PlayerMapper.class);
+        Player existing = playerMapper.getPlayer(player.getId());
+        if (existing == null) {
+            playerMapper.insertPlayer(player);
+        } else {
+            playerMapper.updatePlayer(player);
         }
     }
 
     /** Create or update existing entry. */
     public void upsertEntry(Entry entry) {
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            EntryMapper entryMapper = session.getMapper(EntryMapper.class);
-            Entry existing = entryMapper.getEntry(entry.getId(), entry.getGameId());
-            if (existing == null) {
-                entryMapper.insertEntry(entry);
-            } else {
-                entryMapper.updateEntry(entry);
-            }
+        EntryMapper entryMapper = getMapper(EntryMapper.class);
+        Entry existing = entryMapper.getEntry(entry.getId(), entry.getGameId());
+        if (existing == null) {
+            entryMapper.insertEntry(entry);
+        } else {
+            entryMapper.updateEntry(entry);
         }
     }
 
     public void updateEntry(Entry entry) {
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            session.getMapper(EntryMapper.class).updateEntry(entry);
-        }
+        getMapper(EntryMapper.class).updateEntry(entry);
     }
 
     public Entry getEntry(int id, int gameId) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(EntryMapper.class).getEntry(id, gameId);
-        }
+        return getMapper(EntryMapper.class).getEntry(id, gameId);
     }
 
 //    public List<Player> getAllPlayers() {
@@ -229,53 +199,44 @@ public class Storage {
 //        }
 //    }
 
-    public List<PlayerListCache.PlayerListEntry> getAllPlayerIdsAndPositions() {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(PlayerMapper.class).getPlayerListIds();
-        }
+    public Cursor<Integer> getAllPlayerIds(SortingPolicy sortingPolicy) {
+        String orderBy = sortingPolicy == SortingPolicy.BY_RATING ? "rating" : "rep";
+        return getMapper(PlayerMapper.class).getAllPlayerIds(orderBy);
     }
 
     public List<Player> getUsersByIds(List<Integer> ids) {
-        try (SqlSession session = sessionFactory.openSession()) {
-            List<Player> players = session.getMapper(PlayerMapper.class).getPlayers(ids);
-            // Make sure they are sorted according to ids parameter.
-            players.sort(comparing(player -> ids.indexOf(player.getId())));
-            return players;
-        }
+        List<Player> players = getMapper(PlayerMapper.class).getPlayers(ids);
+        // Make sure they are sorted according to ids parameter.
+        players.sort(comparing(player -> ids.indexOf(player.getId())));
+        return players;
     }
     
     public void updateRepPositions() {
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            PlayerMapper playerMapper = session.getMapper(PlayerMapper.class);
-            int batchSize = 50000;
-            int maxPlayerId = playerMapper.getMaxPlayerId();
-            Progress progress = new Progress(logger, "Updating rep positions...", maxPlayerId);
-            int id = 0;
-            while (id <= maxPlayerId) {
-                playerMapper.updateRepPositions(id, id + batchSize);
-                progress.incProgress(batchSize);
-                id += batchSize; // +1 since SQL BETWEEN condition is inclusive.
-                try {
-                    session.flushStatements();
-                } catch (Exception e) {
-                    System.out.println(e);
-                }
+        PlayerMapper playerMapper = getMapper(PlayerMapper.class);
+        int batchSize = 50000;
+        int maxPlayerId = playerMapper.getMaxPlayerId();
+        Progress progress = new Progress(logger, "Updating rep positions...", maxPlayerId);
+        int id = 0;
+        while (id <= maxPlayerId) {
+            playerMapper.updateRepPositions(id, id + batchSize);
+            progress.incProgress(batchSize);
+            id += batchSize; // +1 since SQL BETWEEN condition is inclusive.
+            try {
+                session.get().flushStatements();
+            } catch (Exception e) {
+                logger.error("Error flushing statements.", e);
             }
         }
     }
 
     public int getCycleStartGameId() {
-        try (SqlSession session = sessionFactory.openSession()) {
-            return session.getMapper(GameMapper.class).getCycleStartGameId();
-        }
+        return getMapper(GameMapper.class).getCycleStartGameId();
     }
 
     public void batchUpdateLastVisit(Instant from, Instant to, Instant visitTime) {
-        try (SqlSession session = sessionFactory.openSession(true)) {
-            session.getMapper(GameMapper.class)
-                   .batchUpdateLastVisit(Timestamp.from(from),
-                                         Timestamp.from(to),
-                                         Timestamp.from(visitTime));
-        }
+        getMapper(GameMapper.class).batchUpdateLastVisit(
+                Timestamp.from(from),
+                Timestamp.from(to),
+                Timestamp.from(visitTime));
     }
 }

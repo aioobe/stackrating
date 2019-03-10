@@ -9,11 +9,13 @@ services:
     volumes:
       - ./data:/var/lib/postgresql/data
   service:
-    image: openjdk:8u181-jre-slim
+    image: openjdk:11-jre-slim
     volumes:
       - ./dist:/opt/stackrating
     working_dir: /opt/stackrating
-    command: java -jar stackrating-0.0.1-SNAPSHOT.jar
+    command: java -jar stackrating-1.1.jar
+    ports:
+      - 4567:4567
     depends_on:
       - db
   caddy:

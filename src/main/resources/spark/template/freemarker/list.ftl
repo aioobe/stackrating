@@ -17,6 +17,9 @@
                 <#if userNotFound>
                     <span style="color: red">User not found</span>
                 </#if>
+                <#if useNumericId>
+                    <span style="color: red">Use <a style="color: red; text-decoration: underline" href="http://meta.stackexchange.com/questions/98771/what-is-my-user-id">numeric id</a></span>
+                </#if>
             </form>
         </div>
         <div style="clear: both">&nbsp;</div>

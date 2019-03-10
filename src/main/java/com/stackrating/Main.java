@@ -1,6 +1,5 @@
 package com.stackrating;
 
-
 import com.stackrating.model.*;
 import com.stackrating.storage.Storage;
 import org.slf4j.Logger;
@@ -23,30 +22,25 @@ import java.util.List;
 import java.util.*;
 import java.util.function.Function;
 
-import static com.stackrating.Main.SortingPolicy.BY_RATING;
-import static com.stackrating.Main.SortingPolicy.BY_REPUTATION;
+import static com.stackrating.SortingPolicy.BY_RATING;
+import static com.stackrating.SortingPolicy.BY_REPUTATION;
 import static java.util.Comparator.comparing;
 import static spark.Spark.*;
 
-
 public class Main {
 
-    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+    private final static boolean DEV_MODE = true;
 
-    public enum SortingPolicy { BY_RATING, BY_REPUTATION }
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     final static int USERS_PER_PAGE = 50;
     final static int ENTRIES_PER_PAGE = 50;
 
     static private Storage storage;
     static private ContentUpdater contentUpdater;
+    static private PlayerListCache playerListCache;
 
-    // Player list page is too slow without a cache. Luckily it seems like this is the only data
-    // that needs to be cached though. Right now (2016-01-01) it takes 16 seconds to load and
-    // requires 1 GB extra memory.
-    static private PlayerListCache playerListCache = new PlayerListCache();
-
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws Exception {
 
         // For graceful shutdown on Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -59,6 +53,7 @@ public class Main {
         }));
 
         storage = new Storage();
+        playerListCache = new PlayerListCache(storage);
         contentUpdater = new ContentUpdater(storage);
 
         // If we did an unclean shutdown (left the database in a state where for instance positions
@@ -72,18 +67,16 @@ public class Main {
         reloadPlayerListCache();
         startSpark();
 
-        // Caution; Don't activate this unnecessarily during development (save the quota)
-        try {
+        // Save quota! Don't run in dev mode.
+        if (!DEV_MODE) {
             contentUpdater.startLooping(Main::reloadPlayerListCache);
-        } catch (SQLException ex) {
-            logger.error("SQLException: " + ex.getMessage(), ex);
         }
     }
 
     private static void reloadPlayerListCache() {
-        logger.info("(Re)loading player list cache into memory...");
+        logger.info("Refreshing player list cache...");
         long start = System.currentTimeMillis();
-        playerListCache.setEntries(storage.getAllPlayerIdsAndPositions());
+        playerListCache.regenerateCache();
         long elapsedMs = System.currentTimeMillis() - start;
         logger.info("Player list cache loaded in " + (elapsedMs) / 1000 + " seconds.");
     }
@@ -91,6 +84,9 @@ public class Main {
     private static void startSpark() {
 
         staticFiles.location("/static");
+
+        before("/*", (req, res) -> storage.openSession());
+        after("/*", (req, res) -> storage.closeSession());
 
         get("/", (req, res) -> {
             res.redirect("/list/byRating");
@@ -112,9 +108,9 @@ public class Main {
         }, new FreeMarkerEngine());
 
         ////////////////////////////////////////////////////////////////////////////////////////////
-        get("/getBadge", (req, res) -> {
-            return new ModelAndView(new HashMap<String, String>(), "get-badge.ftl");
-        }, new FreeMarkerEngine());
+        get("/getBadge", (req, res) ->
+                new ModelAndView(new HashMap<String, String>(), "get-badge.ftl"),
+                new FreeMarkerEngine());
 
         ////////////////////////////////////////////////////////////////////////////////////////////
         get("/stats", (req, res) -> {
@@ -125,50 +121,48 @@ public class Main {
 
         ////////////////////////////////////////////////////////////////////////////////////////////
         get("/list/:sort", (req, res) -> {
-
-            SortingPolicy sortingPolicy = req.params(":sort").equals("byRating") ? BY_RATING : BY_REPUTATION;
+            SortingPolicy sortBy = req.params(":sort").equals("byRating") ? BY_RATING : BY_REPUTATION;
             int userCount = playerListCache.getUserCount();
             int numPages = (int) Math.ceil((double) userCount / USERS_PER_PAGE);
-            int pageParam = getIntParam(req, "page", 1);
-            pageParam = clamp(1, pageParam, numPages);
+            int currentPage = parseInt(req.queryParams("page")).orElse(1);
+            currentPage = clamp(1, currentPage, numPages);
 
             // Handle search query
             Optional<Player> highlightedPlayer = Optional.empty();
-            String searchQuery = req.queryParams("userId");
+            String searchQuery = req.queryParams("userId").trim();
             if (searchQuery != null) {
-                searchQuery = searchQuery.trim();
-                if (!searchQuery.matches("\\d+")) {
-                    // Do nothing
-                } else {
+                try {
                     int soughtUserId = Integer.parseInt(searchQuery);
                     highlightedPlayer = storage.findPlayer(soughtUserId);
+                } catch (NumberFormatException e) {
+                    // Do nothing
                 }
             }
-            // Set current page
-            int currentPage;
+
+            // If search -> override current page
             if (highlightedPlayer.isPresent()) {
                 Player player = highlightedPlayer.get();
-                int pos = sortingPolicy == BY_RATING ? player.getRatingPos() : player.getRepPos();
+                int pos = sortBy == BY_RATING ? player.getRatingPos() : player.getRepPos();
                 currentPage = ((pos - 1) / USERS_PER_PAGE) + 1;
-            } else {
-                currentPage = pageParam;
             }
 
-//            List<Player> usersOnPage = sortingPolicy == BY_RATING
-//                    ? storage.getByRatingPage(currentPage, USERS_PER_PAGE)
-//                    : storage.getByRepPage(currentPage, USERS_PER_PAGE);
-            List<Integer> userIdsOnThisPage = playerListCache.getIdsForPage(currentPage, USERS_PER_PAGE, sortingPolicy);
-            List<Player> usersOnThisPage = storage.getUsersByIds(userIdsOnThisPage);
+            // Replaced by playerListCache
+            //List<Player> usersOnPage = sortBy == BY_RATING
+            //       ? storage.getByRatingPage(currentPage, USERS_PER_PAGE)
+            //       : storage.getByRepPage(currentPage, USERS_PER_PAGE);
+            List<Integer> userIdsOnPage = playerListCache.getIdsForPage(currentPage, USERS_PER_PAGE, sortBy);
+            List<Player> usersOnPage = storage.getUsersByIds(userIdsOnPage);
 
             // Template attributes
             Map<String, Object> attrs = new HashMap<>();
             attrs.put("show", "home");
             attrs.put("currentPage", currentPage);
             attrs.put("numPages", numPages);
-            attrs.put("sortBy", sortingPolicy == BY_RATING ? "rating" : "rep");
-            attrs.put("userNotFound", searchQuery != null && searchQuery.length() > 0 && highlightedPlayer == null);
+            attrs.put("sortBy", sortBy == BY_RATING ? "rating" : "rep");
+            attrs.put("useNumericId", searchQuery != null && !searchQuery.matches("\\d+"));
+            attrs.put("userNotFound", searchQuery != null && searchQuery.matches("\\d+") && !highlightedPlayer.isPresent());
             attrs.put("highlightedUser", highlightedPlayer.map(Player::getId).orElse(-2));
-            attrs.put("users", usersOnThisPage);
+            attrs.put("users", usersOnPage);
 
             // Return page
             return new ModelAndView(attrs, "list.ftl");
@@ -184,15 +178,15 @@ public class Main {
 
             int numEntries = storage.getEntryCountForUser(userId);
             int numPages = (int) Math.ceil((double) numEntries / ENTRIES_PER_PAGE);
-            int currentPageNum = getIntParam(req, "page", 1);
-            currentPageNum = clamp(1, currentPageNum, numPages);
+            int currentPage = parseInt(req.queryParams("page")).orElse(1);
+            currentPage = clamp(1, currentPage, numPages);
 
             List<TimeDataPoint> ratingGraph = storage.getRatingGraph(userId);
-            List<Entry> entriesOnThisPage = storage.getEntriesPage(userId, currentPageNum, ENTRIES_PER_PAGE);
+            List<Entry> entriesOnThisPage = storage.getEntriesPage(userId, currentPage, ENTRIES_PER_PAGE);
 
             // Prep template attributes
             Map<String, Object> attrs = new HashMap<>();
-            attrs.put("currentPage", currentPageNum);
+            attrs.put("currentPage", currentPage);
             attrs.put("player", player);
             attrs.put("numPages", numPages);
             attrs.put("entries", entriesOnThisPage);
@@ -276,56 +270,14 @@ public class Main {
     }
 
 
-    public static String getParam(Request req, String key, String def) {
-        String val = req.queryMap(key).value();
-        return val != null ? val : def;
-    }
-
-//    public static int getIntParamInRange(Request req, String key, int min, int max) {
-//        int n = getIntParamInRange(req, key, min);
-//        return Math.max(min, Math.min(n, max));
-//    }
-
     public static int clamp(int min, int val, int max) {
         return Math.max(min, Math.min(val, max));
-    }
-
-    public static int getIntParam(Request req, String key, int def) {
-        String val = getParam(req, key, null);
-        try {
-            if (val != null)
-                return Integer.parseInt(val);
-        } catch (NumberFormatException nfe) {
-        }
-        return def;
     }
 
     @SafeVarargs
     public static <T extends Comparable<T>> T max(T... ts) {
         return Collections.max(Arrays.asList(ts));
     }
-
-    /*
-    public static <T> List<T> getPage(List<T> list, int page, int pageSize) {
-        int from = (page - 1) * pageSize;
-        int to = Math.min(from + pageSize, list.size());
-        return list.subList(from, to);
-    }
-    
-    public static <T> List<T> getPageReversed(List<T> list, int page, int pageSize) {
-        int from = (page - 1) * pageSize;
-        int to = Math.min(from + pageSize, list.size());
-        List<T> pageContent = new ArrayList<>(pageSize);
-        for (int i = from; i < to; i++)
-            pageContent.add(list.get(list.size() - i - 1));
-        return pageContent;
-    }
-
-
-    public static int numPages(int items, int pageSize) {
-        return (int) Math.ceil((double) items / pageSize);
-    }
-*/
 
     private static Optional<Integer> parseInt(String str) {
         try {

@@ -4,36 +4,38 @@ version '1.1'
 apply plugin: 'java'
 apply plugin: 'idea'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 10
 
 repositories {
     mavenCentral()
     mavenLocal()
 }
 
-jar {
-    manifest { 
-        attributes "Main-Class": "com.stackrating.Main"
-    }
-    doFirst {
-        from {
-            configurations.compile.collect {
-                it.isDirectory() ? it : zipTree(it)
-            }
-        }
-    }
-    exclude 'META-INF/*.RSA', 'META-INF/*.SF','META-INF/*.DSA'
-}
-
 dependencies {
-    compile 'com.googlecode.stackexchange:stackoverflow-java-sdk-release:2.2.1-SNAPSHOT'
-    compile 'org.postgresql:postgresql:9.4-1201-jdbc41'
-
-    compile 'com.sparkjava:spark-core:2.7.1'
-    compile 'com.sparkjava:spark-template-freemarker:2.7.1'
-
-    compile 'org.mybatis:mybatis:3.3.0'
+    // Logging
     compile 'org.slf4j:slf4j-simple:1.7.26'
     compile 'org.slf4j:slf4j-api:1.7.26'
     compile 'ch.qos.logback:logback-classic:1.0.13'
+
+    // Stack Overflow API
+    compile 'com.googlecode.stackexchange:stackoverflow-java-sdk-release:2.2.1-SNAPSHOT'
+
+    // Database
+    compile 'org.postgresql:postgresql:9.4-1201-jdbc41'
+    compile 'org.mybatis:mybatis:3.5.0'
+
+    // Spark
+    compile 'com.sparkjava:spark-core:2.7.1'
+    compile 'com.sparkjava:spark-template-freemarker:2.7.1'
+}
+
+jar {
+    manifest {
+        attributes "Main-Class": "com.stackrating.Main"
+    }
+    from {
+        configurations.compile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
 }
