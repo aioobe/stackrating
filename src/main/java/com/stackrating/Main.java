@@ -14,10 +14,6 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.sql.SQLException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.*;
 import java.util.function.Function;
@@ -29,8 +25,7 @@ import static spark.Spark.*;
 
 public class Main {
 
-    private final static boolean DEV_MODE = true;
-
+    private static final boolean DEV_MODE = true;
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     final static int USERS_PER_PAGE = 50;
@@ -57,8 +52,8 @@ public class Main {
         contentUpdater = new ContentUpdater(storage);
 
         // If we did an unclean shutdown (left the database in a state where for instance positions
-        // don't reflect a sorted rating/reputation or a question was downloaded but not yet judged)
-        // we here give the user a chance to do a database fixup before launch.
+        // don't reflect a sorted rating/reputation or a question was downloaded but not yet
+        // judged) we here give the user a chance to do a database fixup before launch.
         boolean safeStart = false; // TODO: Make cmd line argument
         if (safeStart) {
             contentUpdater.doDatabaseFixup(0);
@@ -124,8 +119,8 @@ public class Main {
             SortingPolicy sortBy = req.params(":sort").equals("byRating") ? BY_RATING : BY_REPUTATION;
             int userCount = playerListCache.getUserCount();
             int numPages = (int) Math.ceil((double) userCount / USERS_PER_PAGE);
-            int currentPage = parseInt(req.queryParams("page")).orElse(1);
-            currentPage = clamp(1, currentPage, numPages);
+            int currentPage = Util.parseInt(req.queryParams("page")).orElse(1);
+            currentPage = Util.clamp(1, currentPage, numPages);
 
             // Handle search query
             Optional<Player> highlightedPlayer = Optional.empty();
@@ -178,8 +173,8 @@ public class Main {
 
             int numEntries = storage.getEntryCountForUser(userId);
             int numPages = (int) Math.ceil((double) numEntries / ENTRIES_PER_PAGE);
-            int currentPage = parseInt(req.queryParams("page")).orElse(1);
-            currentPage = clamp(1, currentPage, numPages);
+            int currentPage = Util.parseInt(req.queryParams("page")).orElse(1);
+            currentPage = Util.clamp(1, currentPage, numPages);
 
             List<TimeDataPoint> ratingGraph = storage.getRatingGraph(userId);
             List<Entry> entriesOnThisPage = storage.getEntriesPage(userId, currentPage, ENTRIES_PER_PAGE);
@@ -255,7 +250,7 @@ public class Main {
     }
 
     private static int parseIntParam(Request req, String param) {
-        return parseInt(req.params(param))
+        return Util.parseInt(req.params(param))
                 .orElseThrow(BadRequestException::new);
     }
 
@@ -269,23 +264,6 @@ public class Main {
         Spark.stop();
     }
 
-
-    public static int clamp(int min, int val, int max) {
-        return Math.max(min, Math.min(val, max));
-    }
-
-    @SafeVarargs
-    public static <T extends Comparable<T>> T max(T... ts) {
-        return Collections.max(Arrays.asList(ts));
-    }
-
-    private static Optional<Integer> parseInt(String str) {
-        try {
-            return Optional.of(Integer.parseInt(str));
-        } catch (NumberFormatException nfe) {
-            return Optional.empty();
-        }
-    }
 
     // index of the search key, if it is contained in the array; otherwise, (-(insertion point) - 1)
     public static <T, K extends Comparable<K>> int findIndex(List<T> sortedList, K key, Function<T, K> f) {
@@ -309,11 +287,5 @@ public class Main {
     public static <T, K extends Comparable<K>> T find(List<T> sortedList, K key, Function<T, K> f) {
         int i = findIndex(sortedList, key, f);
         return i < 0 ? null : sortedList.get(i);
-    }
-    
-    public static String formatInstant(Instant i) {
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                                .withZone(ZoneOffset.UTC)
-                                .format(i);
     }
 }

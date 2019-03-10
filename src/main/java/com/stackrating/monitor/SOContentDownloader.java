@@ -22,7 +22,7 @@ import java.util.Properties;
 
 import static com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory.newInstance;
 import static com.google.code.stackexchange.schema.StackExchangeSite.STACK_OVERFLOW;
-import static com.stackrating.Main.formatInstant;
+import static com.stackrating.Util.formatInstant;
 import static java.time.temporal.ChronoUnit.SECONDS;
 
 public class SOContentDownloader {

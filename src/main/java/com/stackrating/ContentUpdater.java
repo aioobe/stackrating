@@ -11,7 +11,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
 
-import static com.stackrating.Main.formatInstant;
+import static com.stackrating.Util.formatInstant;
 import static java.time.temporal.ChronoUnit.HOURS;
 
 public class ContentUpdater {
