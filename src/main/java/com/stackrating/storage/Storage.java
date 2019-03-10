@@ -46,7 +46,7 @@ public class Storage {
         sessionFactory = new SqlSessionFactoryBuilder().build(inputStream, dbProperties);
     }
 
-    public Closeable openSession() {
+    public NonThrowingCloseable openSession() {
         session.set(sessionFactory.openSession(ExecutorType.BATCH, true));
         return this::closeSession;
     }
@@ -127,8 +127,7 @@ public class Storage {
     }
 
     public List<Entry> getEntriesPage(int userId, int page, int pageSize) {
-        return getMapper(EntryMapper.class)
-                .getEntriesPage(userId, page, pageSize);
+        return getMapper(EntryMapper.class).getEntriesPage(userId, page, pageSize);
     }
 
     private static long truncateTimestamp(TimeDataPoint rd) {
@@ -144,6 +143,10 @@ public class Storage {
 
     public void rejudgeGames(int fromGameId) {
         new RatingUpdater(session.get()).recalcRatings(fromGameId);
+    }
+
+    public void updateNameAndRep(int playerId, String name, int rep) {
+        getMapper(PlayerMapper.class).updateNameAndRep(playerId, name, rep);
     }
 
     /** Create or update existing game. */
@@ -193,12 +196,6 @@ public class Storage {
         return getMapper(EntryMapper.class).getEntry(id, gameId);
     }
 
-//    public List<Player> getAllPlayers() {
-//        try (SqlSession session = sessionFactory.openSession()) {
-//            return session.getMapper(PlayerMapper.class).getAllPlayers();
-//        }
-//    }
-
     public Cursor<Integer> getAllPlayerIds(SortingPolicy sortingPolicy) {
         String orderBy = sortingPolicy == SortingPolicy.BY_RATING ? "rating" : "rep";
         return getMapper(PlayerMapper.class).getAllPlayerIds(orderBy);
@@ -234,9 +231,10 @@ public class Storage {
     }
 
     public void batchUpdateLastVisit(Instant from, Instant to, Instant visitTime) {
-        getMapper(GameMapper.class).batchUpdateLastVisit(
-                Timestamp.from(from),
-                Timestamp.from(to),
-                Timestamp.from(visitTime));
+        getMapper(GameMapper.class)
+                .batchUpdateLastVisit(
+                        Timestamp.from(from),
+                        Timestamp.from(to),
+                        Timestamp.from(visitTime));
     }
 }

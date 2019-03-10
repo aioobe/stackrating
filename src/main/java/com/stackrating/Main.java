@@ -25,7 +25,7 @@ import static spark.Spark.*;
 
 public class Main {
 
-    private static final boolean DEV_MODE = true;
+    private static final boolean DEV_MODE = false;
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     final static int USERS_PER_PAGE = 50;
@@ -263,7 +263,6 @@ public class Main {
         logger.info("Shutting down Spark...");
         Spark.stop();
     }
-
 
     // index of the search key, if it is contained in the array; otherwise, (-(insertion point) - 1)
     public static <T, K extends Comparable<K>> int findIndex(List<T> sortedList, K key, Function<T, K> f) {

@@ -2,14 +2,15 @@ package com.stackrating;
 
 import com.stackrating.model.Game;
 import com.stackrating.monitor.SOContentDownloader;
+import com.stackrating.storage.NonThrowingCloseable;
 import com.stackrating.storage.Storage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.stackrating.Util.formatInstant;
 import static java.time.temporal.ChronoUnit.HOURS;
@@ -30,7 +31,7 @@ public class ContentUpdater {
 
     // For graceful shutdowns
     SOContentDownloader contentDownloader;
-    private volatile boolean keepRunning;
+    private AtomicBoolean keepRunning = new AtomicBoolean(true);
     private Semaphore control = new Semaphore(1);
 
     public ContentUpdater(Storage storage) throws IOException {
@@ -44,41 +45,46 @@ public class ContentUpdater {
     // This means that a question whose lastVisit time is less than postTime + 90 days should be
     // revisited.
 
-    public void doUpdateCycle() throws InterruptedException {
+    public void doUpdateCycle(AtomicBoolean keepRunning) throws InterruptedException {
         setCycleStartTime();
         logger.info("Refreshing/downloading new questions...");
-
-        contentDownloader.refreshContent(cycleStartGame.getPostTime().toInstant());  // .minus(10, MINUTES); // Step back a little bit to make sure we visit the question at the 'from' timestamp.
-
+        contentDownloader.refreshQuestions(cycleStartGame.getPostTime().toInstant(), keepRunning);
+        logger.info("Refreshing/downloading player information...");
+        contentDownloader.refreshPlayers(keepRunning);
         doDatabaseFixup(cycleStartGame.getId());
     }
     
     public void doDatabaseFixup(int fromGameId) {
         // While fetching new questions, seen users are updated too. Adjust their rep positions.
         logger.info("Updating rep positions...");
-        storage.updateRepPositions();
+        try (NonThrowingCloseable c = storage.openSession()) {
+            storage.updateRepPositions();
+        }
 
-        // Update rating_deltas in entries and all ratings and rating positions for the players.
-        logger.info("Recalculating rating deltas from game with id " + fromGameId + " onwards...");
-        storage.rejudgeGames(fromGameId);
+        try (NonThrowingCloseable c = storage.openSession()) {
+            // Update rating_deltas in entries and all ratings and rating positions for the players.
+            logger.info("Recalculating rating deltas from game " + fromGameId + " onwards...");
+            storage.rejudgeGames(fromGameId);
+        }
     }
     
     private void setCycleStartTime() {
-        int cycleStartGameId = storage.getCycleStartGameId();
-        cycleStartGame = storage.findGame(cycleStartGameId).get();
-        logger.info("*** Starting new update cycle at "
-                            + formatInstant(cycleStartGame.getPostTime().toInstant())
-                            + " (game id " + cycleStartGameId + ")");
+        try (NonThrowingCloseable c = storage.openSession()) {
+            int cycleStartGameId = storage.getCycleStartGameId();
+            cycleStartGame = storage.findGame(cycleStartGameId).get();
+            logger.info("*** Starting new update cycle at "
+                    + formatInstant(cycleStartGame.getPostTime().toInstant())
+                    + " (game id " + cycleStartGameId + ")");
+        }
     }
 
-    public void startLooping(Runnable endOfCycleCallback) throws InterruptedException, SQLException {
-        keepRunning = true;
+    public void startLooping(Runnable endOfCycleCallback) throws InterruptedException {
         control.acquire();
-        while (keepRunning) {
+        while (keepRunning.get()) {
 
             printMemoryUsage();
 
-            doUpdateCycle();
+            doUpdateCycle(keepRunning);
 
             // Used to for instance reload caches.
             endOfCycleCallback.run();
@@ -90,8 +96,10 @@ public class ContentUpdater {
             if (contentDownloader.getLastSeenQuota() < 1000) {
                 logger.info("Low on quota. Sleeping for 24 hours.");
                 // Sleep for 24 hours.
-                for (long i = 0; i < Duration.of(24, HOURS).toMillis() && keepRunning; i += 1000) {
+                long leftToSleep = Duration.of(24, HOURS).toMillis();
+                while (leftToSleep > 0 && keepRunning.get()) {
                     Thread.sleep(1000);
+                    leftToSleep -= 1000;
                 }
             }
         }
@@ -112,7 +120,7 @@ public class ContentUpdater {
     }
 
     public void shutdown() throws InterruptedException {
-        keepRunning = false;
+        keepRunning.set(false);
         control.acquire();
     }
 }

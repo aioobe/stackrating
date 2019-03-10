@@ -8,10 +8,12 @@ import com.stackrating.log.Progress;
 import com.stackrating.model.Entry;
 import com.stackrating.model.Game;
 import com.stackrating.model.Player;
+import com.stackrating.storage.NonThrowingCloseable;
 import com.stackrating.storage.Storage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -19,6 +21,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.code.stackexchange.client.query.StackExchangeApiQueryFactory.newInstance;
 import static com.google.code.stackexchange.schema.StackExchangeSite.STACK_OVERFLOW;
@@ -29,13 +32,19 @@ public class SOContentDownloader {
 
     private static final Logger logger = LoggerFactory.getLogger(SOContentDownloader.class);
 
-    private final String FILTER = "!)IMA2K9zb551p*lhR1G2BOBhUlbt_W6F_3Xb";
+    // Leave at least MIN_QUOTA available. Could for instance be useful if one needs to debug a
+    // crash that happened earlier the same day.
+    private final int MIN_QUOTA = 50;
+
+    private final String USER_FILTER = "!T6o*9ZK8_erLKZ5IC*";
+    private final String QUESTION_FILTER = "!)IMA2K9zb551p*lhR1G2BOBhUlbt_W6F_3Xb";
     private final StackExchangeApiQueryFactory queryFactory;
 
-    Storage storage;
-    TimedLock apiLock = new TimedLock();
-    int lastSeenQuota = Integer.MAX_VALUE;
-    Game lastProcessed;
+    private final Storage storage;
+    private TimedLock apiLock = new TimedLock();
+    private int lastSeenQuota = Integer.MAX_VALUE;
+    private Game lastProcessed;
+    private int lastUserPage = 0;
 
     public SOContentDownloader(Storage storage) throws IOException {
         this.storage = storage;
@@ -48,24 +57,26 @@ public class SOContentDownloader {
         this.queryFactory = newInstance(appKey, STACK_OVERFLOW);
     }
 
-    public void refreshContent(Instant from) throws InterruptedException {
+    public void refreshQuestions(Instant from, AtomicBoolean keepRunning)
+            throws InterruptedException {
         
         Instant t = from;
         Instant visitTime = Instant.now();
         Progress progress = new Progress(logger,
                                          "Refreshing/downloading questions...",
                                          Duration.between(from, visitTime).toHours());
-        int questionsDownloadedSoFar = 0;
-        while (true) {
+        while (keepRunning.get()) {
             apiLock.acquire();
-            PagedList<Question> questions = queryFactory.newQuestionApiQuery()
-                                                        .withTimePeriod(new TimePeriod(Date.from(t), Date.from(visitTime)))
-                                                        .withSort(SortOrder.LEAST_RECENTLY_CREATED)
-                                                        .withFilter(FILTER)
-                                                        .withPaging(new Paging(1, 100))
-                                                        .list();
-            lastSeenQuota = questions.getQuotaRemaining();
+            PagedList<Question> questions = queryFactory
+                    .newQuestionApiQuery()
+                    .withTimePeriod(new TimePeriod(Date.from(t), Date.from(visitTime)))
+                    .withSort(SortOrder.LEAST_RECENTLY_CREATED)
+                    .withFilter(QUESTION_FILTER)
+                    .withPaging(new Paging(1, 100))
+                    .list();
             apiLock.release(questions.getBackoff(), SECONDS);
+
+            lastSeenQuota = questions.getQuotaRemaining();
 
             // Are we done? (Since we advance time to the point of the last game, we will
             // unfortunately always receive the last processed game in the next query too.)
@@ -75,12 +86,10 @@ public class SOContentDownloader {
                 break;
             }
 
-            try {
-                storage.openSession();
+            try (NonThrowingCloseable c = storage.openSession()) {
 
                 for (Question q : questions) {
                     lastProcessed = processQuestion(q, visitTime);
-                    questionsDownloadedSoFar++;
                 }
 
                 // Some games may have been deleted. These games will not be returned in this query,
@@ -98,29 +107,62 @@ public class SOContentDownloader {
                 progress.setProgress(Duration.between(from, t).toHours(),
                         "quota: " + questions.getQuotaRemaining(),
                         "time: " + formatInstant(t));
-
-            } finally {
-                storage.closeSession();
             }
 
-            if (questions.getQuotaRemaining() < 100) {
+            if (questions.getQuotaRemaining() < MIN_QUOTA) {
+                // Under normal operation, this is probably quite bad, since we now only do one of
+                // these cycles per day.
                 logger.info("Low on quota. Enough downloading for now.");
                 break;
             }
-
-            // Implementation note:
-            // This check was originally added since during catchup the algorithm would just keep
-            // downloading new questions and never start rejudging them. I thought that it made
-            // sense to have this limit. The problem with this is that once the algorithm have
-            // caught up, and this limit kicks in in the middle of the last 90 days, the algorithm
-            // will reset to the cycle start point all the time (right before 90 days ago) over and
-            // over and "today" will never be reached.
-//            if (questionsDownloadedSoFar >= 400000) {
-//                logger.info(questionsDownloadedSoFar + " questions downloaded. Enough for now.");
-//                break;
-//            }
         }
-        logger.info("Remaining quota: " + lastSeenQuota);
+        logger.info("Remaining quota after refreshQuestions: " + lastSeenQuota);
+    }
+
+    public void refreshPlayers(AtomicBoolean keepRunning) throws InterruptedException {
+        int initialQuotaRemaining = lastSeenQuota;
+        Progress progress = new Progress(logger,
+                "Refreshing/downloading player information...",
+                lastSeenQuota - MIN_QUOTA);
+
+        // This will loop until we're too low on quota
+        while (keepRunning.get()) {
+            apiLock.acquire();
+            PagedList<User> users = queryFactory.newUserApiQuery()
+                    .withSort(User.SortOrder.MOST_REPUTED)
+                    .withPaging(new Paging(lastUserPage, 100))
+                    .withFilter(USER_FILTER)
+                    .list();
+            apiLock.release(users.getBackoff(), SECONDS);
+
+            lastSeenQuota = users.getQuotaRemaining();
+
+            progress.setProgress(initialQuotaRemaining - users.getQuotaRemaining(),
+                    "page: " + lastUserPage,
+                    "quota remaining: " + users.getQuotaRemaining());
+
+            try (NonThrowingCloseable c = storage.openSession()) {
+                for (User user : users) {
+                    storage.updateNameAndRep(
+                            (int) user.getUserId(),
+                            user.getDisplayName(),
+                            (int) user.getReputation());
+                }
+            }
+
+            if (users.hasMore()) {
+                lastUserPage++;
+            } else {
+                lastUserPage = 0;
+            }
+
+            if (users.getQuotaRemaining() < MIN_QUOTA) {
+                logger.info("Low on quota. Enough downloading for now.");
+                break;
+            }
+        }
+
+        logger.info("Remaining quota after refreshPlayers: " + lastSeenQuota);
     }
 
     public int getLastSeenQuota() {

@@ -13,11 +13,16 @@ public interface PlayerMapper {
     void insertPlayer(Player p);
     void updatePlayer(Player p);
     void updateRating(@Param("playerId") int playerId, @Param("rating") double rating);
+    void updateNameAndRep(
+            @Param("playerId") int playerId,
+            @Param("name") String name,
+            @Param("rep") int rep);
     void updateRatingPositions(@Param("fromId") int fromId, @Param("toId") int toId);
     int getMaxPlayerId();
     Cursor<Integer> getAllPlayerIds(@Param("orderBy") String orderBy);
     List<Player> getPlayers(@Param("ids") List<Integer> ids);
     void updateRepPositions(@Param("fromId") int fromId, @Param("toId") int toId);
-    List<PlayerState> getPlayerStates(@Param("fromGameId") int fromGameId,
-                                      @Param("playerIds") List<Integer> playerIds);
+    List<PlayerState> getPlayerStates(
+            @Param("fromGameId") int fromGameId,
+            @Param("playerIds") List<Integer> playerIds);
 }

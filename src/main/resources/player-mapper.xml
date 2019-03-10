@@ -55,6 +55,12 @@
         WHERE id = #{playerId}
     </update>
 
+    <update id="updateNameAndRep">
+        UPDATE players
+        SET name display_name = #{name}, rep = #{rep}
+        WHERE id = #{playerId}
+    </update>
+
     <select id="getPlayerStates" resultMap="player_state">
         SELECT
             player_id,

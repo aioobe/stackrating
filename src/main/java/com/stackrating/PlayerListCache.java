@@ -1,5 +1,6 @@
 package com.stackrating;
 
+import com.stackrating.storage.NonThrowingCloseable;
 import com.stackrating.storage.Storage;
 import org.apache.ibatis.cursor.Cursor;
 
@@ -38,7 +39,7 @@ public class PlayerListCache {
     private void regenerateCacheHelper(SortingPolicy sortingPolicy) {
         userCount = 0;
         File cacheFile = cacheFile(sortingPolicy).toFile();
-        try (Closeable ac = storage.openSession();
+        try (NonThrowingCloseable c = storage.openSession();
              FileOutputStream fos = new FileOutputStream(cacheFile);
              BufferedOutputStream bos = new BufferedOutputStream(fos);
              DataOutputStream dos = new DataOutputStream(bos);
