@@ -57,7 +57,7 @@
 
     <update id="updateNameAndRep">
         UPDATE players
-        SET name display_name = #{name}, rep = #{rep}
+        SET display_name = #{name}, rep = #{rep}
         WHERE id = #{playerId}
     </update>
 

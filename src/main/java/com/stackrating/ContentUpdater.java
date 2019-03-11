@@ -46,7 +46,7 @@ public class ContentUpdater {
 
     public void doUpdateCycle() throws InterruptedException {
         setCycleStartTime();
-        contentDownloader.refreshQuestions(cycleStartGame.getPostTime().toInstant());
+//        contentDownloader.refreshQuestions(cycleStartGame.getPostTime().toInstant());
         if (Main.shutdownRequested) {
             return;
         }
