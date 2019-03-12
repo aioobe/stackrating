@@ -52,6 +52,7 @@ public class Storage {
     }
 
     public void closeSession() {
+        session.get().flushStatements();
         session.get().close();
         session.remove();
     }
@@ -117,8 +118,8 @@ public class Storage {
         new RatingUpdater(session.get()).recalcRatings(fromGameId);
     }
 
-    public void updateNameAndRep(int playerId, String name, int rep) {
-        getMapper(PlayerMapper.class).updateNameAndRep(playerId, name, rep);
+    public void updateNameAndRep(int playerId, String displayName, int rep) {
+        getMapper(PlayerMapper.class).updateNameAndRep(playerId, displayName, rep);
     }
 
     /** Create or update existing game. */

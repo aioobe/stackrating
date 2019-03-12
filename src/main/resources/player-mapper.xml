@@ -40,12 +40,12 @@
 
     <insert id="insertPlayer">
         INSERT INTO players(id, display_name, rep, rating, rep_pos, rating_pos)
-        VALUES (#{id}, #{displayName}, #{rep}, 1500, -1, -1)
+        VALUES (#{id}, left(#{displayName}, 40), #{rep}, 1500, -1, -1)
     </insert>
 
     <update id="updatePlayer">
         UPDATE players
-        SET rating = #{rating}, display_name = #{displayName}
+        SET rating = #{rating}, display_name = left(#{displayName}, 40)
         WHERE id = #{id}
     </update>
 
@@ -57,7 +57,7 @@
 
     <update id="updateNameAndRep">
         UPDATE players
-        SET display_name = #{name}, rep = #{rep}
+        SET display_name = left(#{displayName}, 40), rep = #{rep}
         WHERE id = #{playerId}
     </update>
 

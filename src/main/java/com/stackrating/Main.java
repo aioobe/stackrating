@@ -42,6 +42,8 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
+        //org.apache.ibatis.logging.LogFactory.useSlf4jLogging();
+
         // For graceful shutdown on Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {

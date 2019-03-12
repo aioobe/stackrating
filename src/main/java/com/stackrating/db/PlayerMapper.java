@@ -15,7 +15,7 @@ public interface PlayerMapper {
     void updateRating(@Param("playerId") int playerId, @Param("rating") double rating);
     void updateNameAndRep(
             @Param("playerId") int playerId,
-            @Param("name") String name,
+            @Param("displayName") String displayName,
             @Param("rep") int rep);
     void updateRatingPositions(@Param("fromId") int fromId, @Param("toId") int toId);
     int getMaxPlayerId();
